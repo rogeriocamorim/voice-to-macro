@@ -63,14 +63,16 @@ def detect_gpu() -> tuple[str, int]:
 
 
 def recommend_model(vram_mb: int) -> str:
+    # All tags verified against https://ollama.com/library
+    # Optimised for intent classification: small, fast, tools-capable
     if vram_mb >= 8192:
-        return "mistral:7b-q4"
-    elif vram_mb >= 6144:
-        return "phi3:mini"
+        return "qwen2.5:3b"    # 3B, ~2GB VRAM, tools, fast — best for classification
     elif vram_mb >= 4096:
-        return "phi3:mini"
+        return "qwen2.5:3b"    # same — fits fine in 4GB+
+    elif vram_mb >= 2048:
+        return "llama3.2:1b"   # 1B, ~1.3GB VRAM, tools, ultra-fast
     else:
-        return "gemma2:2b"
+        return "llama3.2:1b"   # CPU fallback — smallest usable model
 
 
 def _cuda_index_url() -> str:
@@ -202,7 +204,12 @@ def check_ollama() -> tuple[bool, bool]:
 
 def pull_model(model: str) -> None:
     print(f"\n> Pulling model '{model}' via Ollama (this may take a while)...")
-    subprocess.run(["ollama", "pull", model], check=True)
+    result = subprocess.run(["ollama", "pull", model])
+    if result.returncode != 0:
+        print(f"\n  [ERROR] Pull failed for '{model}'.")
+        print(f"  Check valid model tags at: https://ollama.com/library")
+        print(f"  Common valid tags: mistral, phi3:mini, llama3.2:3b, gemma2:2b")
+        raise subprocess.CalledProcessError(result.returncode, "ollama pull")
 
 
 # ---------------------------------------------------------------------------
@@ -298,8 +305,15 @@ def main():
     # 2. Model recommendation
     recommended = recommend_model(vram_mb)
     device = detect_device(vram_mb)
-    print(f"\n> Recommended Ollama model: {recommended}")
-    custom_model = input(f"  Use this model? Press Enter to confirm or type another: ").strip()
+    print(f"\n> Ollama model for intent classification (verified tags):")
+    print(f"  qwen2.5:3b   — 3B, ~2GB VRAM, tools, RECOMMENDED (fast + accurate)")
+    print(f"  qwen3:4b     — 4B, ~3GB VRAM, tools, newest Qwen (slightly slower)")
+    print(f"  llama3.2:3b  — 3B, ~2GB VRAM, tools, Meta (good alternative)")
+    print(f"  llama3.2:1b  — 1B, ~1.3GB VRAM, tools, ultra-fast (lower accuracy)")
+    print(f"  mistral      — 7B, ~4.4GB VRAM, tools, overkill but very accurate")
+    print(f"  phi3:mini    — 3.8B, ~2.3GB VRAM, fast (no tools support)")
+    print(f"\n  Recommended for your hardware: {recommended}")
+    custom_model = input(f"  Press Enter to use '{recommended}' or type another tag: ").strip()
     model = custom_model if custom_model else recommended
 
     # 3. Ollama check + pull

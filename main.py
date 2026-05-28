@@ -15,6 +15,7 @@ import json
 import os
 import sys
 import time
+from datetime import datetime
 import warnings
 from pathlib import Path
 
@@ -56,7 +57,12 @@ PROFILES_DIR = BASE_DIR / "profiles"
 # Ollama pre-flight check
 # ---------------------------------------------------------------------------
 
-def _check_ollama(model: str) -> None:
+def _ts() -> str:
+    """Return current time as a short prefix: [05/28/2026 12:26:03]"""
+    return datetime.now().strftime("[%m/%d/%Y %I:%M:%S %p]")
+
+
+(model: str) -> None:
     """
     Verify Ollama is installed and its server is reachable.
     Print clear, actionable messages — never silently fail.
@@ -127,10 +133,10 @@ def process_transcript(
     4. Save to learned store
     """
     if not transcript.strip():
-        print("\r\033[K[MAIN] (nothing heard — too short or silent)", flush=True)
+        print(f"\r\033[K{_ts()} (nothing heard — too short or silent)", flush=True)
         return
 
-    print(f"\r\033[K[MAIN] Heard: \033[96m'{transcript}'\033[0m", flush=True)
+    print(f"\r\033[K{_ts()} Heard: \033[96m'{transcript}'\033[0m", flush=True)
 
     # Special built-in commands
     if "help" in transcript:
@@ -141,7 +147,7 @@ def process_transcript(
     learned = lookup(transcript)
     if learned:
         action_name = learned["intent"]
-        print(f"[MAIN] Learned match: '{transcript}' → {action_name}")
+        print(f"{_ts()} Learned match: '{transcript}' → {action_name}")
         ok = dispatch_profile_action(action_name, profile)
         if ok:
             increment_uses(transcript)
@@ -155,14 +161,14 @@ def process_transcript(
     t0 = time.perf_counter()
     action_name, confidence = parse_intent(transcript, profile, model=model)
     llm_ms = (time.perf_counter() - t0) * 1000
-    print(f"[MAIN] LLM result: '{action_name}' (confidence={confidence:.2f}) [{llm_ms:.0f}ms]")
+    print(f"{_ts()} LLM result: '{action_name}' (confidence={confidence:.2f}) [{llm_ms:.0f}ms]")
 
     if action_name != "unknown" and confidence >= confidence_threshold:
         t1 = time.perf_counter()
         ok = dispatch_profile_action(action_name, profile)
         exec_ms = (time.perf_counter() - t1) * 1000
         if ok:
-            print(f"[MAIN] Executed '{action_name}' [{exec_ms:.0f}ms]")
+            print(f"{_ts()} Executed '{action_name}' [{exec_ms:.0f}ms]")
             save_mapping(transcript, action_name, action_name, confirmed=False)
             increment_uses(transcript)
             speaker.confirm(action_name)
@@ -200,13 +206,13 @@ def run_ptt(config: dict, profile: dict, speaker: Speaker, stt: WhisperSTT) -> N
         print(f"\r\033[K[MAIN] Hold '{ptt_key}' to speak...", end="", flush=True)
         audio = recorder.record()
         if audio is None or len(audio) < sample_rate * 0.3:
-            print("\r\033[K[MAIN] (too short — ignored)", flush=True)
+            print(f"\r\033[K{_ts()} (too short — ignored)", flush=True)
             continue
 
         t0 = time.perf_counter()
         transcript = stt.transcribe(audio, sample_rate=sample_rate)
         stt_ms = (time.perf_counter() - t0) * 1000
-        print(f"\r\033[K[STT] Transcribed in {stt_ms:.0f}ms", flush=True)
+        print(f"\r\033[K{_ts()} [STT] Transcribed in {stt_ms:.0f}ms", flush=True)
         process_transcript(
             transcript=transcript,
             profile=profile,

@@ -15,6 +15,9 @@ import json
 import sys
 from pathlib import Path
 
+import shutil
+import urllib.request
+
 import yaml  # type: ignore
 
 from agent.feedback import clarify
@@ -41,8 +44,42 @@ PROFILES_DIR = BASE_DIR / "profiles"
 
 
 # ---------------------------------------------------------------------------
-# Config + profile loading
+# Ollama pre-flight check
 # ---------------------------------------------------------------------------
+
+def _check_ollama(model: str) -> None:
+    """
+    Verify Ollama is installed and its server is reachable.
+    Print clear, actionable messages — never silently fail.
+    """
+    binary_found = bool(shutil.which("ollama"))
+
+    if not binary_found:
+        print("\n[OLLAMA] Binary not found on PATH.")
+        print("         Install from https://ollama.com/download")
+        print("         After installing, launch the Ollama app to start the server.")
+        print(f"         Then run: ollama pull {model}")
+        print("\n[OLLAMA] Continuing anyway — LLM calls will fail until Ollama is running.\n")
+        return
+
+    server_running = False
+    try:
+        urllib.request.urlopen("http://localhost:11434", timeout=3)
+        server_running = True
+    except Exception:
+        pass
+
+    if not server_running:
+        print("\n[OLLAMA] Ollama is installed but the server is NOT running.")
+        print("         Fix: launch the Ollama desktop app, or run in a terminal:")
+        print("              ollama serve")
+        print(f"         Then pull the model if you haven't: ollama pull {model}")
+        print("\n[OLLAMA] Continuing anyway — LLM calls will fail until the server is up.\n")
+    else:
+        print(f"[OLLAMA] Server running. Model: {model}")
+
+
+
 
 def load_config() -> dict:
     if not CONFIG_PATH.exists():
@@ -225,6 +262,9 @@ def main() -> None:
     print(f"  Model     : {config.get('model', 'phi3:mini')}")
     print(f"  Personality: {config.get('personality', 'generic')}")
     print(f"{'='*55}\n")
+
+    # Ollama pre-flight — inform user clearly if something is wrong
+    _check_ollama(config.get("model", "phi3:mini"))
 
     # Initialise shared components
     stt = WhisperSTT(

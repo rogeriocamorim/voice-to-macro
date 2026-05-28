@@ -67,7 +67,14 @@ def parse_intent(
         )
         raw = response.get("response", "").strip()
     except Exception as e:
-        print(f"[AGENT] Ollama error: {e}")
+        err = str(e)
+        if "connection" in err.lower() or "refused" in err.lower() or "timeout" in err.lower():
+            print("[AGENT] Cannot reach Ollama server. Is it running?")
+            print("        Fix: launch the Ollama app or run: ollama serve")
+        elif "not found" in err.lower() or "no such" in err.lower():
+            print(f"[AGENT] Model not found. Pull it with: ollama pull {model}")
+        else:
+            print(f"[AGENT] Ollama error: {e}")
         return "unknown", 0.0
 
     cleaned = _clean(raw)

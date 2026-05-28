@@ -81,12 +81,38 @@ def detect_device(vram_mb: int) -> str:
 # Ollama helpers
 # ---------------------------------------------------------------------------
 
-def ollama_installed() -> bool:
+def _ollama_binary_exists() -> bool:
+    """Check if the ollama binary is findable on PATH or common install locations."""
+    import shutil
+    if shutil.which("ollama"):
+        return True
+    # Windows default install path
+    common = [
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Ollama" / "ollama.exe",
+        Path("C:/Program Files/Ollama/ollama.exe"),
+    ]
+    return any(p.exists() for p in common)
+
+
+def _ollama_server_running() -> bool:
+    """Check if the Ollama API server is reachable on localhost:11434."""
+    import urllib.request
+    import urllib.error
     try:
-        result = subprocess.run(["ollama", "--version"], capture_output=True, timeout=5)
-        return result.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+        urllib.request.urlopen("http://localhost:11434", timeout=3)
+        return True
+    except Exception:
         return False
+
+
+def check_ollama() -> tuple[bool, bool]:
+    """
+    Returns (binary_found, server_running).
+    Both must be True for ollama pull/generate to work.
+    """
+    binary = _ollama_binary_exists()
+    server = _ollama_server_running() if binary else False
+    return binary, server
 
 
 def pull_model(model: str) -> None:
@@ -191,18 +217,41 @@ def main():
     model = custom_model if custom_model else recommended
 
     # 3. Ollama check + pull
-    if not ollama_installed():
-        print("\n  [WARNING] Ollama is not installed or not in PATH.")
-        print("  Download it from https://ollama.com and re-run setup.")
-        sys.exit(1)
+    print("\n> Checking Ollama...")
+    binary_found, server_running = check_ollama()
 
-    do_pull = input(f"\n> Pull model '{model}' now? [Y/n]: ").strip().lower()
-    if do_pull in ("", "y", "yes"):
-        try:
-            pull_model(model)
-            print(f"  Model '{model}' ready.")
-        except subprocess.CalledProcessError:
-            print(f"  [ERROR] Failed to pull model. Check Ollama is running.")
+    if not binary_found:
+        print("  [ERROR] Ollama binary not found.")
+        print("  Install it from https://ollama.com/download then re-run setup.")
+        print("  After installing, launch the Ollama app (it runs a local server).")
+        cont = input("\n  Continue setup without pulling a model? [y/N]: ").strip().lower()
+        if cont not in ("y", "yes"):
+            sys.exit(1)
+    elif not server_running:
+        print("  [WARNING] Ollama is installed but the server is not running.")
+        print("  Start it by launching the Ollama app or running: ollama serve")
+        print()
+        cont = input("  Start Ollama now, then press Enter to retry, or type 's' to skip: ").strip().lower()
+        if cont != "s":
+            # Re-check after user says they started it
+            _, server_running = check_ollama()
+            if not server_running:
+                print("  Still not reachable. Skipping model pull — run 'ollama pull' manually later.")
+            else:
+                print("  Ollama server detected.")
+    else:
+        print("  Ollama is installed and running.")
+
+    if binary_found and server_running:
+        do_pull = input(f"\n> Pull model '{model}' now? [Y/n]: ").strip().lower()
+        if do_pull in ("", "y", "yes"):
+            try:
+                pull_model(model)
+                print(f"  Model '{model}' ready.")
+            except subprocess.CalledProcessError:
+                print(f"  [ERROR] Pull failed. Try manually: ollama pull {model}")
+    else:
+        print(f"\n  Skipped model pull. Run manually later: ollama pull {model}")
 
     # 4. Mode selection
     print("\n> Choose listening mode:")

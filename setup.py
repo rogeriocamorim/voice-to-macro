@@ -74,7 +74,22 @@ def recommend_model(vram_mb: int) -> str:
 
 
 def detect_device(vram_mb: int) -> str:
-    return "cuda" if vram_mb > 0 else "cpu"
+    """
+    Returns 'cuda' only if a GPU was found AND the installed torch
+    was compiled with CUDA support. Falls back to 'cpu' otherwise.
+    """
+    if vram_mb <= 0:
+        return "cpu"
+    try:
+        import torch  # type: ignore
+        if torch.cuda.is_available():
+            return "cuda"
+        else:
+            print("  [INFO] GPU detected but torch has no CUDA support — using CPU.")
+            print("         To enable GPU: pip install torch --index-url https://download.pytorch.org/whl/cu121")
+            return "cpu"
+    except ImportError:
+        return "cpu"
 
 
 # ---------------------------------------------------------------------------

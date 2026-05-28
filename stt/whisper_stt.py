@@ -36,12 +36,25 @@ class WhisperSTT:
         self._model = None
         self._model_size = model_size
         self._device = device
-        self._compute_type = compute_type or ("float16" if device == "cuda" else "int8")
+        # compute_type is resolved at load time after CUDA verification
+        self._compute_type = compute_type  # None = decide in _load()
 
     def _load(self) -> None:
         """Lazy-load the model on first transcription call."""
         if self._model is not None:
             return
+
+        # Verify CUDA is actually available — fall back to CPU silently
+        if self._device == "cuda":
+            import torch  # type: ignore
+            if not torch.cuda.is_available():
+                print("[STT] CUDA requested but not available in this torch build — falling back to CPU.")
+                self._device = "cpu"
+                self._compute_type = "int8"
+
+        if self._compute_type is None:
+            self._compute_type = "float16" if self._device == "cuda" else "int8"
+
         from faster_whisper import WhisperModel  # type: ignore
         print(f"[STT] Loading Whisper '{self._model_size}' on {self._device}...")
         self._model = WhisperModel(

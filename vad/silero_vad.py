@@ -55,6 +55,12 @@ class SileroVAD:
         if self._model is not None:
             return
         import torch  # type: ignore
+
+        # Verify CUDA is actually available in this torch build — fall back to CPU silently
+        if self.device == "cuda" and not torch.cuda.is_available():
+            print("[VAD] CUDA requested but not available in this torch build — falling back to CPU.")
+            self.device = "cpu"
+
         print("[VAD] Loading Silero VAD model...")
         model, _ = torch.hub.load(
             repo_or_dir="snakers4/silero-vad",

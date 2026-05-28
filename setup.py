@@ -73,19 +73,36 @@ def recommend_model(vram_mb: int) -> str:
         return "gemma2:2b"
 
 
+def _cuda_index_url() -> str:
+    """
+    Return the correct PyTorch CUDA wheel index URL for the running Python version.
+
+    cu121 wheels only exist for Python <= 3.12.
+    cu124 wheels cover Python 3.13 and 3.14.
+    """
+    major, minor = sys.version_info.major, sys.version_info.minor
+    if (major, minor) <= (3, 12):
+        return "https://download.pytorch.org/whl/cu121"
+    else:
+        return "https://download.pytorch.org/whl/cu124"
+
+
 def _install_cuda_torch() -> bool:
     """
-    Reinstall torch and torchaudio with CUDA 12.1 support.
+    Reinstall torch and torchaudio with the correct CUDA build for this Python version.
     Uses --force-reinstall so pip swaps the CPU build even if versions match.
     Returns True if successful.
     """
-    print("\n  Installing CUDA-enabled torch (this may take a few minutes)...")
+    index_url = _cuda_index_url()
+    py_ver = f"{sys.version_info.major}.{sys.version_info.minor}"
+    print(f"\n  Python {py_ver} detected — using index: {index_url}")
+    print("  Installing CUDA-enabled torch (this may take a few minutes)...")
     try:
         subprocess.run(
             [
                 sys.executable, "-m", "pip", "install",
                 "torch", "torchaudio",
-                "--index-url", "https://download.pytorch.org/whl/cu121",
+                "--index-url", index_url,
                 "--force-reinstall",
             ],
             check=True,

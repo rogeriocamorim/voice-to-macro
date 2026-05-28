@@ -13,12 +13,16 @@ import re
 from typing import Any
 
 import ollama  # type: ignore
+from thefuzz import fuzz  # type: ignore
 
 from agent.context_builder import build_prompt
 
 
 # Normalize LLM output: strip whitespace/punctuation, lowercase
 _CLEAN_RE = re.compile(r"[^a-z0-9_ ]")
+
+# Minimum fuzzy score (0-100) to accept a description match without LLM
+_DESCRIPTION_MATCH_THRESHOLD = 72
 
 
 def _clean(text: str) -> str:
@@ -52,7 +56,29 @@ def parse_intent(
     if not transcript.strip():
         return "unknown", 0.0
 
-    actions = set(profile.get("actions", {}).keys())
+    actions = profile.get("actions", {})
+    action_keys = set(actions.keys())
+
+    # --- Fast-path: fuzzy match against action descriptions ---
+    # Skip the LLM entirely if the transcript closely matches a description.
+    t_lower = transcript.lower().strip()
+    best_action, best_score = None, 0
+    for action_name, action_data in actions.items():
+        description = action_data.get("description", "").lower()
+        score = max(
+            fuzz.token_set_ratio(t_lower, description),
+            fuzz.partial_ratio(t_lower, description),
+        )
+        if score > best_score:
+            best_score = score
+            best_action = action_name
+
+    if best_score >= _DESCRIPTION_MATCH_THRESHOLD and best_action:
+        confidence = round(best_score / 100, 2)
+        print(f"[AGENT] Description match: '{best_action}' (score={best_score})")
+        return best_action, confidence
+
+    # --- LLM classification (Ollama) ---
     prompt = build_prompt(transcript, profile)
 
     try:
@@ -80,11 +106,11 @@ def parse_intent(
     cleaned = _clean(raw)
 
     # Exact match
-    if cleaned in actions:
+    if cleaned in action_keys:
         return cleaned, 1.0
 
     # Partial match (LLM returned something like "fsd jump" for "fsd_jump")
-    normalized_actions = {a.replace("_", " "): a for a in actions}
+    normalized_actions = {a.replace("_", " "): a for a in action_keys}
     if cleaned in normalized_actions:
         return normalized_actions[cleaned], 0.9
 

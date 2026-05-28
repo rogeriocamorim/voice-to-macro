@@ -77,14 +77,19 @@ def _cuda_index_url() -> str:
     """
     Return the correct PyTorch CUDA wheel index URL for the running Python version.
 
-    cu121 wheels only exist for Python <= 3.12.
-    cu124 wheels cover Python 3.13 and 3.14.
+    Wheel availability on Windows (win_amd64) as of torch 2.12:
+      Python 3.10 – 3.12 → cu121 (older, widely used)
+      Python 3.13         → cu124
+      Python 3.14+        → cu126 (first index to ship cp314 Windows wheels)
     """
     major, minor = sys.version_info.major, sys.version_info.minor
     if (major, minor) <= (3, 12):
         return "https://download.pytorch.org/whl/cu121"
-    else:
+    elif (major, minor) == (3, 13):
         return "https://download.pytorch.org/whl/cu124"
+    else:
+        # Python 3.14+ — cu126 is the first index with cp314 Windows wheels
+        return "https://download.pytorch.org/whl/cu126"
 
 
 def _install_cuda_torch() -> bool:

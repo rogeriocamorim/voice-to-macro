@@ -14,6 +14,7 @@ Quality levers applied:
 """
 
 import os
+import re
 import warnings
 import numpy as np
 from typing import Optional
@@ -23,6 +24,31 @@ os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 os.environ.setdefault("HF_HUB_DISABLE_IMPLICIT_TOKEN", "1")
 warnings.filterwarnings("ignore", message=".*symlinks.*")
 warnings.filterwarnings("ignore", message=".*unauthenticated.*")
+
+
+# ---------------------------------------------------------------------------
+# Hallucination filter
+# ---------------------------------------------------------------------------
+
+# Whisper hallucinates these patterns when given silence or very short noise.
+# Any transcript matching these patterns is treated as empty.
+_HALLUCINATION_PATTERNS = [
+    re.compile(r"^[_\s]+$"),                          # all underscores/spaces: "__ __ __"
+    re.compile(r"(_\s*){4,}"),                        # 4+ repeated underscore tokens
+    re.compile(r"^[\.\,\!\?\s]+$"),                   # only punctuation
+    re.compile(r"(thank you\.?\s*){2,}", re.I),       # repeated "thank you"
+    re.compile(r"(you\.?\s*){3,}", re.I),             # repeated "you"
+    re.compile(r"^\s*(\.{2,}|…)\s*$"),               # ellipsis only
+]
+
+def _is_hallucination(text: str) -> bool:
+    """Return True if the transcript looks like a Whisper hallucination."""
+    if not text.strip():
+        return True
+    for pattern in _HALLUCINATION_PATTERNS:
+        if pattern.search(text):
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -200,6 +226,10 @@ class WhisperSTT:
         )
 
         text = " ".join(seg.text for seg in segments).strip().lower()
+
+        if _is_hallucination(text):
+            return ""
+
         return text
 
     def transcribe_file(self, path: str) -> str:

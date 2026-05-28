@@ -14,6 +14,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import warnings
 from pathlib import Path
 
@@ -151,13 +152,17 @@ def process_transcript(
     model = config.get("model", "phi3:mini")
     confidence_threshold = config.get("confidence_threshold", 0.6)
 
+    t0 = time.perf_counter()
     action_name, confidence = parse_intent(transcript, profile, model=model)
-    print(f"[MAIN] LLM result: '{action_name}' (confidence={confidence:.2f})")
+    llm_ms = (time.perf_counter() - t0) * 1000
+    print(f"[MAIN] LLM result: '{action_name}' (confidence={confidence:.2f}) [{llm_ms:.0f}ms]")
 
     if action_name != "unknown" and confidence >= confidence_threshold:
+        t1 = time.perf_counter()
         ok = dispatch_profile_action(action_name, profile)
+        exec_ms = (time.perf_counter() - t1) * 1000
         if ok:
-            # Save as unconfirmed — auto-confirms after 3 uses
+            print(f"[MAIN] Executed '{action_name}' [{exec_ms:.0f}ms]")
             save_mapping(transcript, action_name, action_name, confirmed=False)
             increment_uses(transcript)
             speaker.confirm(action_name)
@@ -198,7 +203,10 @@ def run_ptt(config: dict, profile: dict, speaker: Speaker, stt: WhisperSTT) -> N
             print("\r\033[K[MAIN] (too short — ignored)", flush=True)
             continue
 
+        t0 = time.perf_counter()
         transcript = stt.transcribe(audio, sample_rate=sample_rate)
+        stt_ms = (time.perf_counter() - t0) * 1000
+        print(f"\r\033[K[STT] Transcribed in {stt_ms:.0f}ms", flush=True)
         process_transcript(
             transcript=transcript,
             profile=profile,

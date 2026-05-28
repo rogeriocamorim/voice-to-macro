@@ -1,0 +1,98 @@
+{
+  "game": "Generic",
+  "personality": "You are a helpful desktop assistant. Respond briefly and clearly.",
+  "actions": {
+    "volume_up": {
+      "description": "Increase system volume",
+      "action": {
+        "type": "sequence",
+        "steps": [
+          { "key": "volumeup" },
+          { "key": "volumeup" },
+          { "key": "volumeup" }
+        ]
+      }
+    },
+    "volume_down": {
+      "description": "Decrease system volume",
+      "action": {
+        "type": "sequence",
+        "steps": [
+          { "key": "volumedown" },
+          { "key": "volumedown" },
+          { "key": "volumedown" }
+        ]
+      }
+    },
+    "mute": {
+      "description": "Toggle mute / unmute audio",
+      "action": { "type": "key", "key": "volumemute" }
+    },
+    "screenshot": {
+      "description": "Take a screenshot",
+      "action": { "type": "key", "key": "printscreen" }
+    },
+    "lock_screen": {
+      "description": "Lock the Windows screen",
+      "action": { "type": "combo", "keys": ["win", "l"] }
+    },
+    "play_pause": {
+      "description": "Play or pause media playback",
+      "action": { "type": "key", "key": "playpause" }
+    },
+    "next_track": {
+      "description": "Skip to the next media track",
+      "action": { "type": "key", "key": "nexttrack" }
+    },
+    "previous_track": {
+      "description": "Go back to the previous media track",
+      "action": { "type": "key", "key": "prevtrack" }
+    },
+    "copy": {
+      "description": "Copy selected text or item",
+      "action": { "type": "combo", "keys": ["ctrl", "c"] }
+    },
+    "paste": {
+      "description": "Paste from clipboard",
+      "action": { "type": "combo", "keys": ["ctrl", "v"] }
+    },
+    "undo": {
+      "description": "Undo last action",
+      "action": { "type": "combo", "keys": ["ctrl", "z"] }
+    },
+    "new_tab": {
+      "description": "Open a new browser or app tab",
+      "action": { "type": "combo", "keys": ["ctrl", "t"] }
+    },
+    "close_tab": {
+      "description": "Close current tab",
+      "action": { "type": "combo", "keys": ["ctrl", "w"] }
+    },
+    "close_window": {
+      "description": "Close the current window",
+      "action": { "type": "combo", "keys": ["alt", "f4"] }
+    },
+    "open_browser": {
+      "description": "Open the default web browser",
+      "action": {
+        "type": "sequence",
+        "steps": [
+          { "combo": ["win", "r"] },
+          { "delay_ms": 400 }
+        ]
+      }
+    },
+    "show_desktop": {
+      "description": "Show desktop / minimise all windows",
+      "action": { "type": "combo", "keys": ["win", "d"] }
+    },
+    "task_manager": {
+      "description": "Open Windows Task Manager",
+      "action": { "type": "combo", "keys": ["ctrl", "shift", "escape"] }
+    },
+    "switch_window": {
+      "description": "Switch between open windows",
+      "action": { "type": "combo", "keys": ["alt", "tab"] }
+    }
+  }
+}

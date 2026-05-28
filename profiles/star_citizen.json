@@ -1,0 +1,107 @@
+{
+  "game": "Star Citizen",
+  "personality": "You are SCOUT, a tactical ship AI. Speak like a military co-pilot. Use brief confirmations like 'Roger that' or 'Quantum drive spooling'.",
+  "actions": {
+    "quantum_drive": {
+      "description": "Spool and engage quantum drive for travel",
+      "action": {
+        "type": "sequence",
+        "steps": [
+          { "key": "b" },
+          { "delay_ms": 1500 },
+          { "key": "b" }
+        ]
+      }
+    },
+    "abort_quantum": {
+      "description": "Abort quantum drive jump",
+      "action": { "type": "key", "key": "b" }
+    },
+    "afterburner": {
+      "description": "Engage afterburner / boost",
+      "action": { "type": "hold", "key": "left_shift", "duration_ms": 2000 }
+    },
+    "landing_gear": {
+      "description": "Toggle landing gear up or down",
+      "action": { "type": "key", "key": "n" }
+    },
+    "vtol": {
+      "description": "Toggle VTOL flight mode",
+      "action": { "type": "key", "key": "k" }
+    },
+    "cruise_control": {
+      "description": "Toggle cruise control / decoupled mode",
+      "action": { "type": "key", "key": "c" }
+    },
+    "shields_front": {
+      "description": "Cycle shield power to front",
+      "action": { "type": "key", "key": "f6" }
+    },
+    "shields_reset": {
+      "description": "Reset shield distribution",
+      "action": { "type": "key", "key": "f7" }
+    },
+    "fire_primary": {
+      "description": "Fire primary weapons",
+      "action": { "type": "hold", "key": "left", "duration_ms": 300 }
+    },
+    "fire_missiles": {
+      "description": "Fire missile salvo",
+      "action": { "type": "key", "key": "m" }
+    },
+    "lock_target": {
+      "description": "Lock on to target",
+      "action": { "type": "key", "key": "t" }
+    },
+    "eject": {
+      "description": "Eject from the ship — emergency only",
+      "action": {
+        "type": "sequence",
+        "steps": [
+          { "combo": ["right_alt", "y"] },
+          { "delay_ms": 200 },
+          { "key": "y" }
+        ]
+      }
+    },
+    "lights": {
+      "description": "Toggle ship lights",
+      "action": { "type": "key", "key": "l" }
+    },
+    "self_destruct": {
+      "description": "Initiate self-destruct sequence",
+      "action": {
+        "type": "sequence",
+        "steps": [
+          { "combo": ["right_alt", "backspace"] },
+          { "delay_ms": 300 },
+          { "key": "backspace" }
+        ]
+      }
+    },
+    "power_weapons": {
+      "description": "Divert power to weapons system",
+      "action": { "type": "key", "key": "f2" }
+    },
+    "power_shields": {
+      "description": "Divert power to shields",
+      "action": { "type": "key", "key": "f3" }
+    },
+    "power_engines": {
+      "description": "Divert power to engines",
+      "action": { "type": "key", "key": "f4" }
+    },
+    "scan_target": {
+      "description": "Ping / scan the area or target",
+      "action": { "type": "key", "key": "v" }
+    },
+    "cycle_camera": {
+      "description": "Cycle through cameras",
+      "action": { "type": "key", "key": "f4" }
+    },
+    "request_landing": {
+      "description": "Request landing clearance at a landing pad",
+      "action": { "type": "combo", "keys": ["left_alt", "n"] }
+    }
+  }
+}

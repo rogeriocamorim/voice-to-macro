@@ -1,0 +1,100 @@
+{
+  "game": "Elite Dangerous",
+  "personality": "You are ARIA, an advanced ship AI co-pilot. Respond with calm, military precision. Use brief, in-character confirmations like 'Aye, Commander' or 'FSD charging'.",
+  "actions": {
+    "fsd_jump": {
+      "description": "Charge and engage FSD for hyperspace jump",
+      "action": {
+        "type": "sequence",
+        "steps": [
+          { "key": "j" },
+          { "delay_ms": 300 },
+          { "key": "j" }
+        ]
+      }
+    },
+    "supercruise": {
+      "description": "Engage supercruise FSD within system",
+      "action": { "type": "key", "key": "j" }
+    },
+    "boost": {
+      "description": "Engine boost / afterburner",
+      "action": { "type": "key", "key": "tab" }
+    },
+    "landing_gear": {
+      "description": "Toggle landing gear up or down",
+      "action": { "type": "key", "key": "l" }
+    },
+    "silent_running": {
+      "description": "Toggle silent running mode",
+      "action": { "type": "key", "key": "delete" }
+    },
+    "hardpoints": {
+      "description": "Deploy or retract weapon hardpoints",
+      "action": { "type": "key", "key": "u" }
+    },
+    "shields": {
+      "description": "Reset or boost shields",
+      "action": { "type": "combo", "keys": ["shift", "1"] }
+    },
+    "throttle_zero": {
+      "description": "Cut throttle to zero",
+      "action": { "type": "key", "key": "x" }
+    },
+    "throttle_full": {
+      "description": "Set throttle to full",
+      "action": { "type": "key", "key": "z" }
+    },
+    "cargo_scoop": {
+      "description": "Toggle cargo scoop",
+      "action": { "type": "key", "key": "v" }
+    },
+    "galaxy_map": {
+      "description": "Open or close the galaxy map",
+      "action": { "type": "key", "key": "m" }
+    },
+    "system_map": {
+      "description": "Open or close the system map",
+      "action": { "type": "key", "key": "semicolon" }
+    },
+    "next_target": {
+      "description": "Target next ship or object",
+      "action": { "type": "key", "key": "g" }
+    },
+    "fire_weapons": {
+      "description": "Fire primary weapons",
+      "action": { "type": "hold", "key": "space", "duration_ms": 500 }
+    },
+    "night_vision": {
+      "description": "Toggle night vision",
+      "action": { "type": "key", "key": "n" }
+    },
+    "lights": {
+      "description": "Toggle ship external lights",
+      "action": { "type": "key", "key": "insert" }
+    },
+    "evasive_maneuver": {
+      "description": "Boost and roll to evade — full evasive maneuver",
+      "action": {
+        "type": "sequence",
+        "steps": [
+          { "key": "tab" },
+          { "delay_ms": 100 },
+          { "key": "a", "hold_ms": 600 }
+        ]
+      }
+    },
+    "request_docking": {
+      "description": "Request docking permission",
+      "action": { "type": "combo", "keys": ["shift", "d"] }
+    },
+    "power_weapons": {
+      "description": "Divert power to weapons",
+      "action": { "type": "combo", "keys": ["shift", "2"] }
+    },
+    "power_engines": {
+      "description": "Divert power to engines",
+      "action": { "type": "combo", "keys": ["shift", "3"] }
+    }
+  }
+}

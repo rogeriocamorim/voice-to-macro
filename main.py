@@ -126,9 +126,10 @@ def process_transcript(
     4. Save to learned store
     """
     if not transcript.strip():
+        print("\r\033[K[MAIN] (nothing heard — too short or silent)", flush=True)
         return
 
-    print(f"[MAIN] Heard: '{transcript}'")
+    print(f"\r\033[K[MAIN] Heard: \033[96m'{transcript}'\033[0m", flush=True)
 
     # Special built-in commands
     if "help" in transcript:
@@ -191,9 +192,11 @@ def run_ptt(config: dict, profile: dict, speaker: Speaker, stt: WhisperSTT) -> N
     speaker.say("Voice to Macro ready. Push to talk mode active.")
 
     while True:
+        print(f"\r\033[K[MAIN] Hold '{ptt_key}' to speak...", end="", flush=True)
         audio = recorder.record()
         if audio is None or len(audio) < sample_rate * 0.3:
-            continue  # too short — likely accidental press
+            print("\r\033[K[MAIN] (too short — ignored)", flush=True)
+            continue
 
         transcript = stt.transcribe(audio, sample_rate=sample_rate)
         process_transcript(

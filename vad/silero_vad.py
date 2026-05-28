@@ -194,11 +194,13 @@ class PTTRecorder:
                 if not self._recording:
                     self._recording = True
                     self._buffer.clear()
+                    print("\r\033[K[REC] \033[91m● Recording...\033[0m", end="", flush=True)
                     pressed_event.set()
 
         def on_release(key):
             if self._normalize_key(key) == self.ptt_key and self._recording:
                 self._recording = False
+                print("\r\033[K[STT] Transcribing...", end="", flush=True)
                 released_event.set()
                 return False  # stop listener
 

@@ -1,0 +1,13 @@
+faster-whisper>=1.0.0
+torch>=2.0.0
+torchaudio>=2.0.0
+silero-vad>=5.1.2
+ollama>=0.3.0
+pyautogui>=0.9.54
+pynput>=1.7.6
+pyttsx3>=2.90
+pyyaml>=6.0
+thefuzz>=0.22.1
+python-Levenshtein>=0.25.0
+sounddevice>=0.4.6
+numpy>=1.24.0

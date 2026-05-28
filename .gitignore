@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+.factorypath
+
+# OS
+.DS_Store
+Thumbs.db
+
+# App runtime
+learned_commands.json
+config.yaml
+
+# Models / cache
+.cache/
+*.bin
+*.pt

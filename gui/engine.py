@@ -8,6 +8,8 @@ heard, intent matched, executed, error.
 
 from __future__ import annotations
 
+import io
+import sys
 import time
 from datetime import datetime
 from typing import Optional
@@ -26,6 +28,38 @@ from vad.silero_vad import PTTRecorder, SileroVAD
 
 def _ts() -> str:
     return datetime.now().strftime("%m/%d/%Y %I:%M:%S %p")
+
+
+class _SignalWriter(io.TextIOBase):
+    """
+    Intercepts sys.stdout writes and emits each line as a Qt signal.
+    Also forwards to the original stdout so the terminal still works.
+    """
+
+    def __init__(self, signal, original_stdout):
+        super().__init__()
+        self._signal = signal
+        self._original = original_stdout
+        self._buffer = ""
+
+    def write(self, text: str) -> int:
+        if self._original:
+            self._original.write(text)
+        self._buffer += text
+        while "\n" in self._buffer:
+            line, self._buffer = self._buffer.split("\n", 1)
+            line = line.strip()
+            if line:
+                self._signal.emit(line)
+        return len(text)
+
+    def flush(self) -> None:
+        if self._original:
+            self._original.flush()
+        # Flush any remaining partial line
+        if self._buffer.strip():
+            self._signal.emit(self._buffer.strip())
+            self._buffer = ""
 
 
 class VoiceEngine(QThread):
@@ -68,6 +102,18 @@ class VoiceEngine(QThread):
         config = self._config
         profile = self._profile
 
+        # Redirect stdout so all print() calls from STT/TTS/AGENT
+        # appear in the GUI log tab as well as the terminal.
+        original_stdout = sys.stdout
+        sys.stdout = _SignalWriter(self.log, original_stdout)
+
+        try:
+            self._run_inner(config, profile)
+        finally:
+            sys.stdout.flush()
+            sys.stdout = original_stdout
+
+    def _run_inner(self, config: dict, profile: dict) -> None:
         # Initialise STT
         self.log.emit(f"[{_ts()}] Initialising Whisper STT...")
         self.status.emit("LOADING STT")

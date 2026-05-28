@@ -134,7 +134,6 @@ class SetupTab(QWidget):
         form2 = QFormLayout()
 
         self.ollama_combo = QComboBox()
-        self.ollama_combo.setEditable(True)
         for value, desc in OLLAMA_MODELS:
             self.ollama_combo.addItem(f"{value}  —  {desc}", value)
         form2.addRow("Ollama Model:", self.ollama_combo)
@@ -226,13 +225,11 @@ class SetupTab(QWidget):
         if idx >= 0:
             self.personality_combo.setCurrentIndex(idx)
 
-        # Ollama model — try to match existing item, otherwise set editable text
+        # Ollama model
         model = cfg.get("model", "qwen2.5:3b")
         idx = self.ollama_combo.findData(model)
         if idx >= 0:
             self.ollama_combo.setCurrentIndex(idx)
-        else:
-            self.ollama_combo.setEditText(model)
 
         # Whisper
         idx = self.whisper_combo.findData(cfg.get("whisper_model", "small"))
@@ -245,13 +242,8 @@ class SetupTab(QWidget):
             self.device_combo.setCurrentIndex(idx)
 
     def _get_selected_ollama_model(self) -> str:
-        """Return the model tag, handling both combo selection and free-text."""
-        data = self.ollama_combo.currentData()
-        if data:
-            return data
-        # User typed a custom model name
-        text = self.ollama_combo.currentText().split("—")[0].strip()
-        return text if text else "qwen2.5:3b"
+        """Return the model tag from the dropdown selection."""
+        return self.ollama_combo.currentData() or "qwen2.5:3b"
 
     def _save_config(self) -> None:
         ptt_key = self.ptt_key_edit.text().strip()

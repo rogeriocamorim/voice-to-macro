@@ -433,15 +433,16 @@ class TestSetupTab:
                 assert "device" in cfg
                 assert "ptt_key" in cfg
 
-    def test_custom_ollama_model(self, tmp_project):
+    def test_ollama_model_selection(self, tmp_project):
+        """Selecting a model from dropdown returns the correct tag."""
         tmp_path, profiles_dir, _, _ = tmp_project
         with patch("gui.setup_tab.CONFIG_PATH", tmp_path / "config.yaml"):
             with patch("gui.setup_tab.PROFILES_DIR", profiles_dir):
                 tab = SetupTab()
-                tab.ollama_combo.setCurrentIndex(-1)
-                tab.ollama_combo.setEditText("custom_model:latest")
+                idx = tab.ollama_combo.findData("mistral")
+                tab.ollama_combo.setCurrentIndex(idx)
                 model = tab._get_selected_ollama_model()
-                assert model == "custom_model:latest"
+                assert model == "mistral"
 
     def test_check_ollama_no_binary(self, tmp_project):
         tmp_path, profiles_dir, _, _ = tmp_project

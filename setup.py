@@ -76,16 +76,17 @@ def recommend_model(vram_mb: int) -> str:
 def _install_cuda_torch() -> bool:
     """
     Reinstall torch and torchaudio with CUDA 12.1 support.
+    Uses --force-reinstall so pip swaps the CPU build even if versions match.
     Returns True if successful.
     """
     print("\n  Installing CUDA-enabled torch (this may take a few minutes)...")
     try:
-        result = subprocess.run(
+        subprocess.run(
             [
                 sys.executable, "-m", "pip", "install",
                 "torch", "torchaudio",
                 "--index-url", "https://download.pytorch.org/whl/cu121",
-                "--upgrade",
+                "--force-reinstall",
             ],
             check=True,
         )
@@ -117,11 +118,7 @@ def detect_device(vram_mb: int) -> str:
         if choice in ("", "y", "yes"):
             success = _install_cuda_torch()
             if success:
-                # Re-import torch to pick up the new build
-                import importlib
-                import torch as _t
-                importlib.reload(_t)
-                # Use subprocess check so we don't rely on the reloaded module
+                # Verify in a fresh subprocess — torch cannot be reloaded in-process
                 check = subprocess.run(
                     [sys.executable, "-c", "import torch; print(torch.cuda.is_available())"],
                     capture_output=True, text=True,
@@ -131,7 +128,8 @@ def detect_device(vram_mb: int) -> str:
                     return "cuda"
                 else:
                     print("  Install succeeded but CUDA still not detected.")
-                    print("  Try restarting the setup after the venv is active.")
+                    print("  This usually means the venv needs a full restart.")
+                    print("  Close this terminal, re-activate the venv, then re-run: python setup.py")
             print("  Falling back to CPU for now.")
         else:
             print("  Skipping — using CPU.")

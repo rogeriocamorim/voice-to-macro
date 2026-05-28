@@ -73,10 +73,35 @@ def recommend_model(vram_mb: int) -> str:
         return "gemma2:2b"
 
 
+def _install_cuda_torch() -> bool:
+    """
+    Reinstall torch and torchaudio with CUDA 12.1 support.
+    Returns True if successful.
+    """
+    print("\n  Installing CUDA-enabled torch (this may take a few minutes)...")
+    try:
+        result = subprocess.run(
+            [
+                sys.executable, "-m", "pip", "install",
+                "torch", "torchaudio",
+                "--index-url", "https://download.pytorch.org/whl/cu121",
+                "--upgrade",
+            ],
+            check=True,
+        )
+        return True
+    except subprocess.CalledProcessError as e:
+        print(f"  [ERROR] Installation failed: {e}")
+        return False
+
+
 def detect_device(vram_mb: int) -> str:
     """
     Returns 'cuda' only if a GPU was found AND the installed torch
-    was compiled with CUDA support. Falls back to 'cpu' otherwise.
+    was compiled with CUDA support.
+
+    If a GPU is found but torch has no CUDA, offers to install the
+    CUDA torch build automatically, then re-checks.
     """
     if vram_mb <= 0:
         return "cpu"
@@ -84,10 +109,35 @@ def detect_device(vram_mb: int) -> str:
         import torch  # type: ignore
         if torch.cuda.is_available():
             return "cuda"
+
+        # GPU found but CPU-only torch installed — offer to fix it
+        print("\n  [!] GPU detected but the installed torch has no CUDA support.")
+        print(f"      Your RTX / GPU will be idle — everything runs on CPU.")
+        choice = input("\n  Install CUDA-enabled torch now? [Y/n]: ").strip().lower()
+        if choice in ("", "y", "yes"):
+            success = _install_cuda_torch()
+            if success:
+                # Re-import torch to pick up the new build
+                import importlib
+                import torch as _t
+                importlib.reload(_t)
+                # Use subprocess check so we don't rely on the reloaded module
+                check = subprocess.run(
+                    [sys.executable, "-c", "import torch; print(torch.cuda.is_available())"],
+                    capture_output=True, text=True,
+                )
+                if check.stdout.strip() == "True":
+                    print("  CUDA torch installed successfully. GPU will be used.")
+                    return "cuda"
+                else:
+                    print("  Install succeeded but CUDA still not detected.")
+                    print("  Try restarting the setup after the venv is active.")
+            print("  Falling back to CPU for now.")
         else:
-            print("  [INFO] GPU detected but torch has no CUDA support — using CPU.")
-            print("         To enable GPU: pip install torch --index-url https://download.pytorch.org/whl/cu121")
-            return "cpu"
+            print("  Skipping — using CPU.")
+            print("  To enable GPU later: pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121")
+        return "cpu"
+
     except ImportError:
         return "cpu"
 

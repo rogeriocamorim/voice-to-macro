@@ -5,8 +5,16 @@ Wraps the WhisperModel to transcribe raw audio (numpy float32 array)
 into a text string. Designed to be cheap to import and re-use across calls.
 """
 
+import os
+import warnings
 import numpy as np
 from typing import Optional
+
+# Suppress huggingface_hub symlink and auth warnings (cosmetic, no functional impact)
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+os.environ.setdefault("HF_HUB_DISABLE_IMPLICIT_TOKEN", "1")
+warnings.filterwarnings("ignore", message=".*symlinks.*")
+warnings.filterwarnings("ignore", message=".*unauthenticated.*")
 
 
 class WhisperSTT:

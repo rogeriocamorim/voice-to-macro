@@ -12,8 +12,16 @@ Usage:
 from __future__ import annotations
 import argparse
 import json
+import os
 import sys
+import warnings
 from pathlib import Path
+
+# Suppress noisy but harmless warnings before any heavy imports
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")  # huggingface symlink warning on Windows
+os.environ.setdefault("HF_HUB_DISABLE_IMPLICIT_TOKEN", "1")    # unauthenticated HF Hub notice
+warnings.filterwarnings("ignore", message=".*symlinks.*")
+warnings.filterwarnings("ignore", message=".*unauthenticated.*")
 
 import shutil
 import urllib.request

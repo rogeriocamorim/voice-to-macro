@@ -275,6 +275,7 @@ def main() -> None:
     speaker = Speaker(
         personality=config.get("personality", "generic"),
         profile=profile,
+        voice_override=config.get("tts_voice") or None,
     )
 
     try:

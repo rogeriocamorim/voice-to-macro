@@ -239,6 +239,16 @@ def capture_ptt_key() -> str:
         with kb.Listener(on_press=on_press) as listener:
             listener.join()
 
+        # Flush any buffered stdin so the captured key doesn't bleed
+        # into the next input() prompt (common on Windows)
+        try:
+            import msvcrt
+            while msvcrt.kbhit():
+                msvcrt.getwch()
+        except ImportError:
+            import termios
+            termios.tcflush(sys.stdin, termios.TCIFLUSH)
+
         return captured["key"] or "caps_lock"
 
     except ImportError:

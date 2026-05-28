@@ -215,7 +215,11 @@ def run_always_on(config: dict, profile: dict, speaker: Speaker, stt: WhisperSTT
     threshold = config.get("vad_threshold", 0.5)
     sample_rate = config.get("sample_rate", 16000)
 
-    vad = SileroVAD(threshold=threshold, device=device)
+    vad = SileroVAD(
+        threshold=threshold,
+        device=device,
+        max_silence_ms=config.get("max_silence_ms", 700),
+    )
 
     print("\n[MAIN] Always-on mode active. Speak naturally. Ctrl+C to quit.\n")
     speaker.say("Voice to Macro ready. Always on mode active.")
@@ -276,8 +280,10 @@ def main() -> None:
 
     # Initialise shared components
     stt = WhisperSTT(
-        model_size=config.get("whisper_model", "base"),
+        model_size=config.get("whisper_model", "small"),
         device=config.get("device", "cpu"),
+        beam_size=config.get("whisper_beam_size", 5),
+        profile=profile,
     )
 
     speaker = Speaker(

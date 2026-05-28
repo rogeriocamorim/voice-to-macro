@@ -255,10 +255,11 @@ PERSONALITIES = {
 }
 
 WHISPER_MODELS = {
-    "1": ("tiny",   "Fastest, least accurate — good for testing"),
-    "2": ("base",   "Fast, decent accuracy — recommended default"),
-    "3": ("small",  "Slower, better accuracy"),
-    "4": ("medium", "Slowest, best accuracy"),
+    "1": ("tiny",      "~1GB VRAM  — fastest, least accurate. Good for testing only"),
+    "2": ("base",      "~1GB VRAM  — fast, decent accuracy"),
+    "3": ("small",     "~2GB VRAM  — good balance of speed and accuracy"),
+    "4": ("medium",    "~5GB VRAM  — much better accuracy, recommended for GPU"),
+    "5": ("large-v3",  "~10GB VRAM — best accuracy available, ideal for RTX 3080Ti+"),
 }
 
 MODES = {
@@ -362,11 +363,25 @@ def main():
         print(f"  [{k}] {v}")
     personality = prompt_choice("  Enter choice", PERSONALITIES, "1")
 
-    # 8. Whisper model
-    print("\n> Choose Whisper STT model size:")
+    # 8. Whisper model — recommend based on VRAM
+    if vram_mb >= 10240 and device == "cuda":
+        whisper_default = "5"   # large-v3
+        whisper_rec_note = "  (large-v3 recommended — your GPU has enough VRAM)"
+    elif vram_mb >= 5120 and device == "cuda":
+        whisper_default = "4"   # medium
+        whisper_rec_note = "  (medium recommended for your GPU)"
+    elif device == "cuda":
+        whisper_default = "3"   # small
+        whisper_rec_note = "  (small recommended for your GPU VRAM)"
+    else:
+        whisper_default = "3"   # small on CPU
+        whisper_rec_note = "  (small recommended for CPU)"
+
+    print(f"\n> Choose Whisper STT model size:{whisper_rec_note}")
     for k, (v, desc) in WHISPER_MODELS.items():
-        print(f"  [{k}] {v} — {desc}")
-    whisper_model = prompt_choice("  Enter choice", {k: v for k, (v, _) in WHISPER_MODELS.items()}, "2")
+        marker = " <-- recommended" if k == whisper_default else ""
+        print(f"  [{k}] {v} — {desc}{marker}")
+    whisper_model = prompt_choice("  Enter choice", {k: v for k, (v, _) in WHISPER_MODELS.items()}, whisper_default)
 
     # 9. Write config.yaml
     config = {

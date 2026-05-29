@@ -470,9 +470,9 @@ class TestSetupTab:
             with patch("gui.setup_tab.PROFILES_DIR", Path("/nonexistent")):
                 tab = SetupTab()
                 all_data = [tab.ollama_combo.itemData(i) for i in range(tab.ollama_combo.count())]
+                assert "tulu3" in all_data
                 assert "qwen2.5:3b" in all_data
                 assert "mistral" in all_data
-                assert "phi3:mini" in all_data
 
 
 # ---------------------------------------------------------------------------

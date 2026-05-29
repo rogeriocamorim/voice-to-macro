@@ -34,11 +34,12 @@ CONFIG_PATH = BASE_DIR / "config.yaml"
 PROFILES_DIR = BASE_DIR / "profiles"
 
 OLLAMA_MODELS = [
-    ("qwen2.5:3b", "3B, ~2GB VRAM — RECOMMENDED for classification"),
+    ("tulu3", "8B, ~5GB VRAM — RECOMMENDED, best instruction following"),
+    ("qwen2.5:3b", "3B, ~2GB VRAM — fast, good for low VRAM"),
     ("qwen3:4b", "4B, ~3GB VRAM — newest Qwen"),
     ("llama3.2:3b", "3B, ~2GB VRAM — Meta"),
     ("llama3.2:1b", "1B, ~1.3GB VRAM — ultra-fast"),
-    ("mistral", "7B, ~4.4GB VRAM — overkill but accurate"),
+    ("mistral", "7B, ~4.4GB VRAM — solid general purpose"),
     ("phi3:mini", "3.8B, ~2.3GB VRAM — no tools"),
 ]
 

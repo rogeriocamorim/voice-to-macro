@@ -64,15 +64,13 @@ def detect_gpu() -> tuple[str, int]:
 
 def recommend_model(vram_mb: int) -> str:
     # All tags verified against https://ollama.com/library
-    # Optimised for intent classification: small, fast, tools-capable
-    if vram_mb >= 8192:
-        return "qwen2.5:3b"    # 3B, ~2GB VRAM, tools, fast — best for classification
-    elif vram_mb >= 4096:
-        return "qwen2.5:3b"    # same — fits fine in 4GB+
+    # Optimised for intent classification: instruction following is key
+    if vram_mb >= 5120:
+        return "tulu3"         # 8B, ~5GB VRAM, best instruction following
     elif vram_mb >= 2048:
-        return "llama3.2:1b"   # 1B, ~1.3GB VRAM, tools, ultra-fast
+        return "qwen2.5:3b"   # 3B, ~2GB VRAM, fast, good for low VRAM
     else:
-        return "llama3.2:1b"   # CPU fallback — smallest usable model
+        return "llama3.2:1b"  # 1B, ~1.3GB VRAM, CPU fallback
 
 
 def _cuda_index_url() -> str:
@@ -316,12 +314,13 @@ def main():
     recommended = recommend_model(vram_mb)
     device = detect_device(vram_mb)
     print(f"\n> Ollama model for intent classification (verified tags):")
-    print(f"  qwen2.5:3b   — 3B, ~2GB VRAM, tools, RECOMMENDED (fast + accurate)")
-    print(f"  qwen3:4b     — 4B, ~3GB VRAM, tools, newest Qwen (slightly slower)")
-    print(f"  llama3.2:3b  — 3B, ~2GB VRAM, tools, Meta (good alternative)")
-    print(f"  llama3.2:1b  — 1B, ~1.3GB VRAM, tools, ultra-fast (lower accuracy)")
-    print(f"  mistral      — 7B, ~4.4GB VRAM, tools, overkill but very accurate")
-    print(f"  phi3:mini    — 3.8B, ~2.3GB VRAM, fast (no tools support)")
+    print(f"  tulu3        — 8B, ~5GB VRAM, RECOMMENDED (best instruction following)")
+    print(f"  qwen2.5:3b   — 3B, ~2GB VRAM, fast (good for low VRAM)")
+    print(f"  qwen3:4b     — 4B, ~3GB VRAM, newest Qwen")
+    print(f"  llama3.2:3b  — 3B, ~2GB VRAM, Meta")
+    print(f"  llama3.2:1b  — 1B, ~1.3GB VRAM, ultra-fast (lower accuracy)")
+    print(f"  mistral      — 7B, ~4.4GB VRAM, solid general purpose")
+    print(f"  phi3:mini    — 3.8B, ~2.3GB VRAM, fast (no tools)")
     print(f"\n  Recommended for your hardware: {recommended}")
     custom_model = input(f"  Press Enter to use '{recommended}' or type another tag: ").strip()
     model = custom_model if custom_model else recommended

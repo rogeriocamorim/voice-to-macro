@@ -18,6 +18,35 @@ if TYPE_CHECKING:
     from search.spansh import SpanshClient
     from tts.speaker import Speaker
 
+
+# ---------------------------------------------------------------------------
+# Shared utility functions used across handlers
+# (defined BEFORE submodule imports to avoid circular import)
+# ---------------------------------------------------------------------------
+
+def format_credits(amount: int) -> str:
+    """Format credits for TTS: 1234567 -> '1.2 million credits'"""
+    if amount >= 1_000_000_000:
+        return f"{amount / 1_000_000_000:.1f} billion credits"
+    elif amount >= 1_000_000:
+        return f"{amount / 1_000_000:.1f} million credits"
+    elif amount >= 1_000:
+        return f"{amount / 1_000:.0f} thousand credits"
+    return f"{amount} credits"
+
+
+def format_population(pop: int) -> str:
+    """Format population for TTS."""
+    if pop >= 1_000_000_000:
+        return f"{pop / 1_000_000_000:.1f} billion"
+    elif pop >= 1_000_000:
+        return f"{pop / 1_000_000:.1f} million"
+    elif pop >= 1_000:
+        return f"{pop / 1_000:.0f} thousand"
+    return str(pop)
+
+
+# Submodule imports (AFTER utility functions are defined)
 from handlers import navigate_to
 from handlers import system_info
 from handlers import find_commodity
@@ -72,24 +101,3 @@ def dispatch_compound(
 # ---------------------------------------------------------------------------
 # Shared utility functions used across handlers
 # ---------------------------------------------------------------------------
-
-def format_credits(amount: int) -> str:
-    """Format credits for TTS: 1234567 -> '1.2 million credits'"""
-    if amount >= 1_000_000_000:
-        return f"{amount / 1_000_000_000:.1f} billion credits"
-    elif amount >= 1_000_000:
-        return f"{amount / 1_000_000:.1f} million credits"
-    elif amount >= 1_000:
-        return f"{amount / 1_000:.0f} thousand credits"
-    return f"{amount} credits"
-
-
-def format_population(pop: int) -> str:
-    """Format population for TTS."""
-    if pop >= 1_000_000_000:
-        return f"{pop / 1_000_000_000:.1f} billion"
-    elif pop >= 1_000_000:
-        return f"{pop / 1_000_000:.1f} million"
-    elif pop >= 1_000:
-        return f"{pop / 1_000:.0f} thousand"
-    return str(pop)

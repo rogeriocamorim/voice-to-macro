@@ -9,17 +9,19 @@ heard, intent matched, executed, error.
 from __future__ import annotations
 
 import io
+import re
 import sys
 import time
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from agent.feedback import clarify
-from agent.intent_parser import parse_intent
+from agent.intent_parser import parse_intent, ParsedIntent
 from executor.action_dispatcher import dispatch_profile_action
+from handlers import dispatch_compound
 from learning.command_store import increment_uses, lookup, save_mapping
 from stt.whisper_stt import WhisperSTT
 from tts.speaker import Speaker
@@ -30,9 +32,15 @@ def _ts() -> str:
     return datetime.now().strftime("%m/%d/%Y %I:%M:%S %p")
 
 
+# Regex to strip ANSI escape codes (colors, cursor movement, etc.)
+# Handles: CSI sequences (\x1b[...m), erase-line (\x1b[K), carriage returns, OSC sequences
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\x1b\][^\x07]*\x07|\r\x1b\[K|\x1b\[K|\r")
+
+
 class _SignalWriter(io.TextIOBase):
     """
     Intercepts sys.stdout writes and emits each line as a Qt signal.
+    Strips ANSI escape codes so the GUI log is clean.
     Also forwards to the original stdout so the terminal still works.
     """
 
@@ -48,7 +56,7 @@ class _SignalWriter(io.TextIOBase):
         self._buffer += text
         while "\n" in self._buffer:
             line, self._buffer = self._buffer.split("\n", 1)
-            line = line.strip()
+            line = _ANSI_RE.sub("", line).strip()
             if line:
                 self._signal.emit(line)
         return len(text)
@@ -58,7 +66,9 @@ class _SignalWriter(io.TextIOBase):
             self._original.flush()
         # Flush any remaining partial line
         if self._buffer.strip():
-            self._signal.emit(self._buffer.strip())
+            clean = _ANSI_RE.sub("", self._buffer).strip()
+            if clean:
+                self._signal.emit(clean)
             self._buffer = ""
 
 
@@ -74,6 +84,7 @@ class VoiceEngine(QThread):
     log = pyqtSignal(str)
     status = pyqtSignal(str)
     recording = pyqtSignal(bool)
+    game_state_ready = pyqtSignal()  # emitted once Elite integration is initialised
 
     def __init__(
         self,
@@ -85,6 +96,11 @@ class VoiceEngine(QThread):
         self._config = config
         self._profile = profile
         self._running = False
+        # Elite Dangerous integration (initialized if profile is elite_dangerous)
+        self._game_state: Any = None
+        self._binds: dict = {}
+        self._edsm: Any = None
+        self._spansh: Any = None
 
     # ------------------------------------------------------------------
     # Public control
@@ -114,6 +130,46 @@ class VoiceEngine(QThread):
             sys.stdout = original_stdout
 
     def _run_inner(self, config: dict, profile: dict) -> None:
+        # Initialize Elite Dangerous integration if applicable
+        profile_name = config.get("active_profile", "generic")
+        journal_path = config.get("elite_journal_path")
+        if journal_path and profile_name == "elite_dangerous":
+            try:
+                from gameapi.game_state import GameState
+                from gameapi.journal_watcher import JournalWatcher
+                from gameapi.status_reader import StatusReader
+                from gameapi.binds_parser import parse_binds, find_binds_file
+                from search.edsm import EDSMClient
+                from search.spansh import SpanshClient
+
+                self._game_state = GameState(journal_path)
+
+                watcher = JournalWatcher(journal_path, self._game_state)
+                watcher.start()
+                self.log.emit(f"[{_ts()}] Journal watcher started")
+
+                status_reader = StatusReader(journal_path, self._game_state)
+                status_reader.start()
+                self.log.emit(f"[{_ts()}] Status reader started")
+
+                binds_file = config.get("elite_binds_file") or find_binds_file(journal_path)
+                if binds_file:
+                    self._binds = parse_binds(binds_file)
+                    self.log.emit(f"[{_ts()}] Loaded {len(self._binds)} keybindings")
+                else:
+                    self.log.emit(f"[{_ts()}] No .binds file found, using profile defaults")
+
+                self._edsm = EDSMClient()
+                self._spansh = SpanshClient()
+                self.log.emit(f"[{_ts()}] EDSM + Spansh API clients ready")
+                self.game_state_ready.emit()
+
+            except ImportError as e:
+                self.log.emit(f"[{_ts()}] Elite integration import failed: {e}")
+                self.log.emit(f"[{_ts()}] Run: pip install httpx watchdog")
+            except Exception as e:
+                self.log.emit(f"[{_ts()}] Elite integration error: {e}")
+
         # Initialise STT
         self.log.emit(f"[{_ts()}] Initialising Whisper STT...")
         self.status.emit("LOADING STT")
@@ -259,20 +315,37 @@ class VoiceEngine(QThread):
 
         self.status.emit("CLASSIFYING")
         t0 = time.perf_counter()
-        action_name, confidence = parse_intent(transcript, profile, model=model)
+        intent = parse_intent(transcript, profile, model=model, game_state=self._game_state)
         llm_ms = (time.perf_counter() - t0) * 1000
-        self.log.emit(f"[{_ts()}] Intent: '{action_name}' (confidence={confidence:.2f}) [{llm_ms:.0f}ms]")
+        self.log.emit(
+            f"[{_ts()}] Intent: '{intent.action}' "
+            f"(confidence={intent.confidence:.2f}, compound={intent.is_compound}) [{llm_ms:.0f}ms]"
+        )
 
-        if action_name != "unknown" and confidence >= confidence_threshold:
-            self.status.emit(f"EXEC: {action_name}")
+        if intent.is_compound and intent.action != "unknown" and intent.confidence >= confidence_threshold:
+            # Compound action -> handler
+            self.status.emit(f"EXEC: {intent.action}")
             t1 = time.perf_counter()
-            ok = dispatch_profile_action(action_name, profile)
+            ok = dispatch_compound(
+                intent.action, intent.params,
+                self._game_state, config, speaker, self._binds or {}, self._edsm, self._spansh,
+            )
             exec_ms = (time.perf_counter() - t1) * 1000
             if ok:
-                self.log.emit(f"[{_ts()}] Executed '{action_name}' [{exec_ms:.0f}ms]")
-                save_mapping(transcript, action_name, action_name, confirmed=False)
+                self.log.emit(f"[{_ts()}] Compound action '{intent.action}' completed [{exec_ms:.0f}ms]")
+                save_mapping(transcript, intent.action, intent.action, confirmed=False)
                 increment_uses(transcript)
-                speaker.confirm(action_name)
+        elif intent.action != "unknown" and intent.confidence >= confidence_threshold:
+            # Simple action -> keystroke dispatch (bind-aware)
+            self.status.emit(f"EXEC: {intent.action}")
+            t1 = time.perf_counter()
+            ok = dispatch_profile_action(intent.action, profile, binds=self._binds)
+            exec_ms = (time.perf_counter() - t1) * 1000
+            if ok:
+                self.log.emit(f"[{_ts()}] Executed '{intent.action}' [{exec_ms:.0f}ms]")
+                save_mapping(transcript, intent.action, intent.action, confirmed=False)
+                increment_uses(transcript)
+                speaker.confirm(intent.action)
         else:
             self.status.emit("CLARIFYING")
             ptt_mode = config.get("mode", "ptt") == "ptt"
@@ -285,7 +358,7 @@ class VoiceEngine(QThread):
                 ptt_mode=ptt_mode,
             )
             if confirmed_action:
-                ok = dispatch_profile_action(confirmed_action, profile)
+                ok = dispatch_profile_action(confirmed_action, profile, binds=self._binds)
                 if ok:
                     self.log.emit(f"[{_ts()}] Clarified -> '{confirmed_action}'")
                     save_mapping(transcript, confirmed_action, confirmed_action, confirmed=True)

@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 
 import yaml
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
 )
 
 from gui.engine import VoiceEngine
+from gui.game_info_tab import GameInfoTab
 from gui.log_tab import LogTab
 from gui.macro_tab import MacroTab
 from gui.setup_tab import SetupTab
@@ -42,6 +43,7 @@ class MainWindow(QMainWindow):
         self.resize(1000, 700)
 
         self._engine: VoiceEngine | None = None
+        self._state_timer: QTimer | None = None
 
         self._build_ui()
         self.setStyleSheet(DARK_THEME)
@@ -88,6 +90,9 @@ class MainWindow(QMainWindow):
         self.macro_tab = MacroTab()
         self.tabs.addTab(self.macro_tab, "Macros")
 
+        self.game_info_tab = GameInfoTab()
+        self.tabs.addTab(self.game_info_tab, "Game Info")
+
         self.log_tab = LogTab()
         self.tabs.addTab(self.log_tab, "Live Log")
 
@@ -133,6 +138,7 @@ class MainWindow(QMainWindow):
         self._engine.status.connect(self._on_status)
         self._engine.recording.connect(self.log_tab.set_recording)
         self._engine.finished.connect(self._on_engine_finished)
+        self._engine.game_state_ready.connect(self._on_game_state_ready)
 
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
@@ -159,6 +165,9 @@ class MainWindow(QMainWindow):
         self.engine_status.setObjectName("statusLabelStopped")
         self.engine_status.setStyleSheet("")
         self.log_tab.set_status("STOPPED")
+        if self._state_timer:
+            self._state_timer.stop()
+            self._state_timer = None
 
     def _on_status(self, status: str) -> None:
         self.engine_status.setText(status)
@@ -169,11 +178,31 @@ class MainWindow(QMainWindow):
         profile_name = cfg.get("active_profile", "generic")
         self.macro_tab.set_profile(profile_name)
 
+    def _on_game_state_ready(self) -> None:
+        """Called when the engine has initialized Elite Dangerous integration."""
+        if not self._engine:
+            return
+        config = self._engine._config
+        self.game_info_tab.set_sources(
+            game_state=self._engine._game_state,
+            edsm=self._engine._edsm,
+            spansh=self._engine._spansh,
+            config=config,
+        )
+        # Start periodic game state refresh (every 2 seconds)
+        self._state_timer = QTimer(self)
+        self._state_timer.timeout.connect(self.game_info_tab.update_game_state)
+        self._state_timer.start(2000)
+        # Do an immediate first update
+        self.game_info_tab.update_game_state()
+
     # ------------------------------------------------------------------
     # Close event
     # ------------------------------------------------------------------
 
     def closeEvent(self, event) -> None:
+        if self._state_timer:
+            self._state_timer.stop()
         if self._engine and self._engine.isRunning():
             self._engine.stop()
             self._engine.wait(3000)

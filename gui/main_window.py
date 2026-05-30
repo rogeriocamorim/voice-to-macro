@@ -88,6 +88,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.setup_tab, "Setup")
 
         self.macro_tab = MacroTab()
+        self.macro_tab.profile_reloaded.connect(self._on_profile_reloaded)
         self.tabs.addTab(self.macro_tab, "Macros")
 
         self.game_info_tab = GameInfoTab()
@@ -186,6 +187,11 @@ class MainWindow(QMainWindow):
         """When config is saved, sync the macro tab to the new profile."""
         profile_name = cfg.get("active_profile", "generic")
         self.macro_tab.set_profile(profile_name)
+
+    def _on_profile_reloaded(self, profile_data: dict) -> None:
+        """Hot-reload the profile in the running engine."""
+        if self._engine and self._engine.isRunning():
+            self._engine._profile = profile_data
 
     # ------------------------------------------------------------------
     # Close event

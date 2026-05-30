@@ -176,6 +176,7 @@ class MacroTab(QWidget):
     """Table-based editor for profile actions."""
 
     profile_changed = pyqtSignal()  # emitted after add/edit/delete
+    profile_reloaded = pyqtSignal(dict)  # emitted with new profile data for the engine
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -222,6 +223,11 @@ class MacroTab(QWidget):
         btn_row.addWidget(self.edit_btn)
         btn_row.addWidget(self.dup_btn)
         btn_row.addStretch()
+        self.save_btn = QPushButton("Save & Reload")
+        self.save_btn.setObjectName("startBtn")  # green styling
+        self.save_btn.setToolTip("Save profile to disk and reload in the running engine")
+        self.save_btn.clicked.connect(self._save_and_reload)
+        btn_row.addWidget(self.save_btn)
         btn_row.addWidget(self.delete_btn)
         layout.addLayout(btn_row)
 
@@ -369,3 +375,13 @@ class MacroTab(QWidget):
         idx = self.profile_combo.findData(profile_name)
         if idx >= 0:
             self.profile_combo.setCurrentIndex(idx)
+
+    def _save_and_reload(self) -> None:
+        """Save profile to disk and emit signal so the engine reloads it."""
+        self._save_profile()
+        self._refresh_table()
+        self.profile_reloaded.emit(self._profile_data)
+        QMessageBox.information(
+            self, "Saved",
+            f"Profile '{self._current_profile}' saved and reloaded in the engine.",
+        )

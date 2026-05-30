@@ -96,6 +96,7 @@ class VoiceEngine(QThread):
         self._config = config
         self._profile = profile
         self._running = False
+        self._recorder: Any = None
         # Elite Dangerous integration (initialized if profile is elite_dangerous)
         self._game_state: Any = None
         self._binds: dict = {}
@@ -108,6 +109,8 @@ class VoiceEngine(QThread):
 
     def stop(self) -> None:
         self._running = False
+        if self._recorder:
+            self._recorder.stop()
 
     # ------------------------------------------------------------------
     # Thread entry
@@ -203,6 +206,7 @@ class VoiceEngine(QThread):
         ptt_key = config.get("ptt_key", "caps_lock")
         sample_rate = config.get("sample_rate", 16000)
         recorder = PTTRecorder(ptt_key=ptt_key, sample_rate=sample_rate)
+        self._recorder = recorder
 
         self.log.emit(f"[{_ts()}] PTT mode active. Hold '{ptt_key}' to speak.")
         self.status.emit("IDLE")

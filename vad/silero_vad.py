@@ -165,6 +165,7 @@ class PTTRecorder:
         self._recording = False
         self._buffer: list[np.ndarray] = []
         self._lock = threading.Lock()
+        self._stop_event = threading.Event()
 
     def _normalize_key(self, key) -> str:
         from pynput import keyboard as kb  # type: ignore
@@ -181,15 +182,18 @@ class PTTRecorder:
     def record(self) -> Optional[np.ndarray]:
         """
         Blocks until PTT key is pressed, records while held, returns audio on release.
-        Returns None if no audio was captured.
+        Returns None if no audio was captured or if stop() was called.
         """
         import sounddevice as sd  # type: ignore
         from pynput import keyboard as kb  # type: ignore
 
+        self._stop_event.clear()
         pressed_event = threading.Event()
         released_event = threading.Event()
 
         def on_press(key):
+            if self._stop_event.is_set():
+                return False  # stop listener
             if self._normalize_key(key) == self.ptt_key:
                 if not self._recording:
                     self._recording = True
@@ -198,6 +202,8 @@ class PTTRecorder:
                     pressed_event.set()
 
         def on_release(key):
+            if self._stop_event.is_set():
+                return False  # stop listener
             if self._normalize_key(key) == self.ptt_key and self._recording:
                 self._recording = False
                 print("\r\033[K[STT] Transcribing...", end="", flush=True)
@@ -212,9 +218,18 @@ class PTTRecorder:
             callback=self._mic_callback,
         ):
             with kb.Listener(on_press=on_press, on_release=on_release) as listener:
-                listener.join()
+                # Wait for the listener to finish, but check for stop every 200ms
+                while listener.is_alive():
+                    if self._stop_event.is_set():
+                        listener.stop()
+                        return None
+                    listener.join(timeout=0.2)
 
         with self._lock:
             if not self._buffer:
                 return None
             return np.concatenate(self._buffer)
+
+    def stop(self) -> None:
+        """Signal the recorder to stop waiting and return immediately."""
+        self._stop_event.set()

@@ -402,6 +402,7 @@ class GameInfoTab(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._engine: Any = None
         self._game_state: Any = None
         self._edsm: Any = None
         self._spansh: Any = None
@@ -552,21 +553,31 @@ class GameInfoTab(QWidget):
     # Public API (called from MainWindow)
     # ------------------------------------------------------------------
 
-    def set_sources(
-        self,
-        game_state: Any,
-        edsm: Any,
-        spansh: Any,
-        config: dict,
-    ) -> None:
-        """Provide references to the game state and API clients."""
-        self._game_state = game_state
-        self._edsm = edsm
-        self._spansh = spansh
+    def set_engine(self, engine: Any, config: dict) -> None:
+        """
+        Store a reference to the VoiceEngine so we can poll its game
+        state / EDSM / Spansh as they become available (they are set
+        asynchronously inside the engine thread).
+        """
+        self._engine = engine
         self._config = config
+
+    def _sync_from_engine(self) -> None:
+        """Pull the latest references from the engine (they may appear later)."""
+        engine = getattr(self, "_engine", None)
+        if not engine:
+            return
+        if not self._game_state and getattr(engine, "_game_state", None):
+            self._game_state = engine._game_state
+        if not self._edsm and getattr(engine, "_edsm", None):
+            self._edsm = engine._edsm
+        if not self._spansh and getattr(engine, "_spansh", None):
+            self._spansh = engine._spansh
 
     def update_game_state(self) -> None:
         """Refresh the game state display from the current GameState object."""
+        self._sync_from_engine()
+
         gs = self._game_state
         if not gs:
             return
@@ -577,8 +588,8 @@ class GameInfoTab(QWidget):
 
         # Ship
         ship_parts = []
-        ship_type = getattr(gs, "_ship_type", None)
-        ship_name = getattr(gs, "_ship_name", None)
+        ship_type = gs.get_ship_type()
+        ship_name = gs.get_ship_name()
         if ship_name:
             ship_parts.append(ship_name)
         if ship_type:
@@ -597,7 +608,7 @@ class GameInfoTab(QWidget):
             self._set_field(self.lbl_fuel, fuel_str)
 
         # Cargo
-        cargo = getattr(gs, "_cargo", 0.0)
+        cargo = gs.get_cargo()
         self._set_field(self.lbl_cargo, f"{cargo:.0f} t")
 
         # Credits
@@ -658,6 +669,8 @@ class GameInfoTab(QWidget):
     def _run_query(self) -> None:
         if self._worker and self._worker.isRunning():
             return
+
+        self._sync_from_engine()
 
         query_type = self.query_type.currentText()
         query_text = self.query_input.text().strip()

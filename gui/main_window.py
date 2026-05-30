@@ -138,7 +138,16 @@ class MainWindow(QMainWindow):
         self._engine.status.connect(self._on_status)
         self._engine.recording.connect(self.log_tab.set_recording)
         self._engine.finished.connect(self._on_engine_finished)
-        self._engine.game_state_ready.connect(self._on_game_state_ready)
+
+        # Give the Game Info tab a reference to the engine so it can
+        # poll game state, EDSM, and Spansh as they become available.
+        self.game_info_tab.set_engine(self._engine, config)
+
+        # Start a timer that refreshes game state every 2 seconds.
+        # The tab handles the case where game_state is not yet available.
+        self._state_timer = QTimer(self)
+        self._state_timer.timeout.connect(self.game_info_tab.update_game_state)
+        self._state_timer.start(2000)
 
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
@@ -177,24 +186,6 @@ class MainWindow(QMainWindow):
         """When config is saved, sync the macro tab to the new profile."""
         profile_name = cfg.get("active_profile", "generic")
         self.macro_tab.set_profile(profile_name)
-
-    def _on_game_state_ready(self) -> None:
-        """Called when the engine has initialized Elite Dangerous integration."""
-        if not self._engine:
-            return
-        config = self._engine._config
-        self.game_info_tab.set_sources(
-            game_state=self._engine._game_state,
-            edsm=self._engine._edsm,
-            spansh=self._engine._spansh,
-            config=config,
-        )
-        # Start periodic game state refresh (every 2 seconds)
-        self._state_timer = QTimer(self)
-        self._state_timer.timeout.connect(self.game_info_tab.update_game_state)
-        self._state_timer.start(2000)
-        # Do an immediate first update
-        self.game_info_tab.update_game_state()
 
     # ------------------------------------------------------------------
     # Close event

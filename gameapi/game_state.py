@@ -264,6 +264,18 @@ class GameState:
         with self._lock:
             return self._balance
 
+    def get_ship_type(self) -> str | None:
+        with self._lock:
+            return self._ship_type
+
+    def get_ship_name(self) -> str | None:
+        with self._lock:
+            return self._ship_name
+
+    def get_cargo(self) -> float:
+        with self._lock:
+            return self._cargo
+
     # Ship flag properties
     def is_docked(self) -> bool:
         with self._lock:

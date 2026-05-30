@@ -10,19 +10,30 @@ Supports four action types defined in profile JSON:
 Also supports bind-aware dispatch for Elite Dangerous: uses the player's
 real keybindings from their .binds file, falling back to profile definitions.
 
-All input is delivered via pyautogui (keyboard) and pynput (fallback).
+Input is delivered via pydirectinput (DirectInput scan codes) so that
+fullscreen games like Elite Dangerous actually receive the keystrokes.
+Falls back to pyautogui if pydirectinput is not available.
 """
 
 from __future__ import annotations
 import time
 from typing import Any
 
-import pyautogui  # type: ignore
-
-# Disable the pyautogui fail-safe (moving mouse to corner stops it)
-# since users may move the mouse during gameplay.
-pyautogui.FAILSAFE = False
-pyautogui.PAUSE = 0.0  # no inter-call sleep; we handle delays ourselves
+# Use pydirectinput for games (sends DirectInput scan codes).
+# Falls back to pyautogui if not installed (non-Windows or missing dep).
+try:
+    import pydirectinput  # type: ignore
+    pydirectinput.FAILSAFE = False
+    pydirectinput.PAUSE = 0.0
+    _input = pydirectinput
+    print("[EXECUTOR] Using pydirectinput (DirectInput scan codes)")
+except ImportError:
+    import pyautogui  # type: ignore
+    pyautogui.FAILSAFE = False
+    pyautogui.PAUSE = 0.0
+    _input = pyautogui
+    print("[EXECUTOR] pydirectinput not found, using pyautogui (may not work in games)")
+    print("           Fix: pip install pydirectinput")
 
 
 # ---------------------------------------------------------------------------
@@ -58,19 +69,19 @@ PROFILE_TO_BINDS: dict[str, str] = {
 
 def _press_key(key: str) -> None:
     """Single keypress (down + up)."""
-    pyautogui.press(key)
+    _input.press(key)
 
 
 def _press_combo(keys: list[str]) -> None:
     """Simultaneous key combination (hotkey)."""
-    pyautogui.hotkey(*keys)
+    _input.hotkey(*keys)
 
 
 def _hold_key(key: str, duration_ms: int) -> None:
     """Hold a key down for a given duration, then release."""
-    pyautogui.keyDown(key)
+    _input.keyDown(key)
     time.sleep(duration_ms / 1000.0)
-    pyautogui.keyUp(key)
+    _input.keyUp(key)
 
 
 def _execute_step(step: dict[str, Any]) -> None:
@@ -130,14 +141,14 @@ def dispatch_from_binds(binds_action_name: str, binds: dict) -> bool:
         keys = binding.modifiers + [binding.key]
         if binding.hold:
             for k in binding.modifiers:
-                pyautogui.keyDown(k)
-            pyautogui.keyDown(binding.key)
+                _input.keyDown(k)
+            _input.keyDown(binding.key)
             time.sleep(0.5)
-            pyautogui.keyUp(binding.key)
+            _input.keyUp(binding.key)
             for k in reversed(binding.modifiers):
-                pyautogui.keyUp(k)
+                _input.keyUp(k)
         else:
-            pyautogui.hotkey(*keys)
+            _input.hotkey(*keys)
     else:
         if binding.hold:
             _hold_key(binding.key, 500)

@@ -7,6 +7,9 @@ Supports four action types defined in profile JSON:
   - hold:     key held for a duration
   - sequence: ordered list of steps (key/combo/hold/delay)
 
+Also supports bind-aware dispatch for Elite Dangerous: uses the player's
+real keybindings from their .binds file, falling back to profile definitions.
+
 All input is delivered via pyautogui (keyboard) and pynput (fallback).
 """
 
@@ -20,6 +23,33 @@ import pyautogui  # type: ignore
 # since users may move the mouse during gameplay.
 pyautogui.FAILSAFE = False
 pyautogui.PAUSE = 0.0  # no inter-call sleep; we handle delays ourselves
+
+
+# ---------------------------------------------------------------------------
+# Profile action name -> .binds action name mapping (Elite Dangerous)
+# ---------------------------------------------------------------------------
+
+PROFILE_TO_BINDS: dict[str, str] = {
+    "fsd_jump": "Hyperspace",
+    "supercruise": "Supercruise",
+    "boost": "UseBoostJuice",
+    "landing_gear": "LandingGearToggle",
+    "silent_running": "ToggleButtonUpInput",
+    "hardpoints": "DeployHardpointToggle",
+    "throttle_zero": "SetSpeedZero",
+    "throttle_full": "SetSpeed100",
+    "cargo_scoop": "ToggleCargoScoop",
+    "galaxy_map": "GalaxyMapOpen",
+    "system_map": "SystemMapOpen",
+    "next_target": "SelectTarget",
+    "night_vision": "NightVisionToggle",
+    "lights": "ShipSpotLightToggle",
+    "request_docking": "FocusCommsPanel",
+    "power_weapons": "IncreaseWeaponsPower",
+    "power_engines": "IncreaseEnginesPower",
+    "shields": "IncreaseSystemsPower",
+    "fire_weapons": "PrimaryFire",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -73,7 +103,52 @@ def _execute_step(step: dict[str, Any]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Public dispatcher
+# Bind-aware dispatch (Elite Dangerous)
+# ---------------------------------------------------------------------------
+
+def dispatch_from_binds(binds_action_name: str, binds: dict) -> bool:
+    """
+    Dispatch using the player's real keybindings from .binds file.
+
+    Parameters
+    ----------
+    binds_action_name : str
+        The Elite Dangerous action name (e.g. "Hyperspace", "GalaxyMapOpen").
+    binds : dict
+        Parsed keybindings dict: {action_name: KeyBinding}.
+
+    Returns
+    -------
+    bool
+        True if binding found and executed, False otherwise.
+    """
+    binding = binds.get(binds_action_name)
+    if not binding:
+        return False
+
+    if binding.modifiers:
+        keys = binding.modifiers + [binding.key]
+        if binding.hold:
+            for k in binding.modifiers:
+                pyautogui.keyDown(k)
+            pyautogui.keyDown(binding.key)
+            time.sleep(0.5)
+            pyautogui.keyUp(binding.key)
+            for k in reversed(binding.modifiers):
+                pyautogui.keyUp(k)
+        else:
+            pyautogui.hotkey(*keys)
+    else:
+        if binding.hold:
+            _hold_key(binding.key, 500)
+        else:
+            _press_key(binding.key)
+
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Public dispatchers
 # ---------------------------------------------------------------------------
 
 def dispatch(action_def: dict[str, Any]) -> None:
@@ -118,9 +193,14 @@ def dispatch(action_def: dict[str, Any]) -> None:
         raise ValueError(f"[EXECUTOR] Unknown action type: '{action_type}'")
 
 
-def dispatch_profile_action(action_name: str, profile: dict[str, Any]) -> bool:
+def dispatch_profile_action(
+    action_name: str, profile: dict[str, Any], binds: dict | None = None
+) -> bool:
     """
     Look up action_name in profile and dispatch it.
+
+    If binds are provided and the action has a known .binds mapping,
+    uses the player's real keybinding. Falls back to profile definition.
 
     Parameters
     ----------
@@ -128,12 +208,21 @@ def dispatch_profile_action(action_name: str, profile: dict[str, Any]) -> bool:
         Key in profile["actions"].
     profile : dict
         Active game profile dict.
+    binds : dict, optional
+        Parsed keybindings from .binds file.
 
     Returns
     -------
     bool
         True if dispatched successfully, False if action not found.
     """
+    # Try real keybinding first (bind-aware path)
+    if binds:
+        binds_action = PROFILE_TO_BINDS.get(action_name)
+        if binds_action and dispatch_from_binds(binds_action, binds):
+            return True
+
+    # Fall back to profile definition
     actions = profile.get("actions", {})
     if action_name not in actions:
         print(f"[EXECUTOR] Action '{action_name}' not found in profile.")

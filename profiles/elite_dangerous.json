@@ -96,5 +96,57 @@
       "description": "Divert power to engines",
       "action": { "type": "combo", "keys": ["shift", "3"] }
     }
+  },
+  "compound_actions": {
+    "navigate_to": {
+      "description": "Plot route to a system in the galaxy map",
+      "params_hint": "{\"target\": \"system name\"}",
+      "handler": "navigate_to"
+    },
+    "system_info": {
+      "description": "Get information about a system",
+      "params_hint": "{\"system\": \"system name\"} (optional, defaults to current)",
+      "handler": "system_info"
+    },
+    "scan_value": {
+      "description": "Check exploration scan values for a system",
+      "params_hint": "{\"system\": \"system name\"} (optional)",
+      "handler": "scan_value"
+    },
+    "danger_check": {
+      "description": "Check if a system is dangerous",
+      "params_hint": "{\"system\": \"system name\"} (optional)",
+      "handler": "danger_check"
+    },
+    "nearby_systems": {
+      "description": "Find systems within range",
+      "params_hint": "{\"radius\": number} (optional, default 50)",
+      "handler": "nearby_systems"
+    },
+    "find_commodity": {
+      "description": "Find best station to buy or sell a commodity",
+      "params_hint": "{\"commodity\": \"name\", \"intent\": \"buy\"|\"sell\"}",
+      "handler": "find_commodity"
+    },
+    "monetize_route": {
+      "description": "Find profitable trade along current nav route",
+      "params_hint": "none",
+      "handler": "monetize_route"
+    },
+    "trade_route": {
+      "description": "Calculate optimal trade route from current location",
+      "params_hint": "none",
+      "handler": "trade_route"
+    },
+    "commander_status": {
+      "description": "Check commander data like credits, ranks, or materials",
+      "params_hint": "{\"query\": \"credits\"|\"ranks\"|\"materials\"|\"position\"}",
+      "handler": "commander_status"
+    },
+    "server_status": {
+      "description": "Check Elite Dangerous server status",
+      "params_hint": "none",
+      "handler": "server_status"
+    }
   }
 }

@@ -16,6 +16,7 @@ import os
 import sys
 import time
 from datetime import datetime
+from typing import Any
 import warnings
 from pathlib import Path
 
@@ -31,8 +32,9 @@ import urllib.request
 import yaml  # type: ignore
 
 from agent.feedback import clarify
-from agent.intent_parser import parse_intent
+from agent.intent_parser import parse_intent, ParsedIntent
 from executor.action_dispatcher import dispatch_profile_action
+from handlers import dispatch_compound
 from learning.command_store import (
     get_all,
     increment_uses,
@@ -62,7 +64,7 @@ def _ts() -> str:
     return datetime.now().strftime("[%m/%d/%Y %I:%M:%S %p]")
 
 
-(model: str) -> None:
+def _check_ollama(model: str) -> None:
     """
     Verify Ollama is installed and its server is reachable.
     Print clear, actionable messages — never silently fail.
@@ -123,7 +125,11 @@ def process_transcript(
     speaker: Speaker,
     config: dict,
     recorder=None,
-    stt: WhisperSTT = None,
+    stt: WhisperSTT | None = None,
+    game_state: Any = None,
+    binds: dict | None = None,
+    edsm: Any = None,
+    spansh: Any = None,
 ) -> None:
     """
     Full pipeline for a single voice transcript:
@@ -148,7 +154,7 @@ def process_transcript(
     if learned:
         action_name = learned["intent"]
         print(f"{_ts()} Learned match: '{transcript}' → {action_name}")
-        ok = dispatch_profile_action(action_name, profile)
+        ok = dispatch_profile_action(action_name, profile, binds=binds)
         if ok:
             increment_uses(transcript)
             speaker.confirm(action_name)
@@ -159,19 +165,32 @@ def process_transcript(
     confidence_threshold = config.get("confidence_threshold", 0.6)
 
     t0 = time.perf_counter()
-    action_name, confidence = parse_intent(transcript, profile, model=model)
+    intent = parse_intent(transcript, profile, model=model, game_state=game_state)
     llm_ms = (time.perf_counter() - t0) * 1000
-    print(f"{_ts()} LLM result: '{action_name}' (confidence={confidence:.2f}) [{llm_ms:.0f}ms]")
+    print(f"{_ts()} LLM result: '{intent.action}' (confidence={intent.confidence:.2f}, compound={intent.is_compound}) [{llm_ms:.0f}ms]")
 
-    if action_name != "unknown" and confidence >= confidence_threshold:
+    if intent.is_compound and intent.action != "unknown" and intent.confidence >= confidence_threshold:
+        # Compound action -> handler
         t1 = time.perf_counter()
-        ok = dispatch_profile_action(action_name, profile)
+        ok = dispatch_compound(
+            intent.action, intent.params,
+            game_state, config, speaker, binds or {}, edsm, spansh,
+        )
         exec_ms = (time.perf_counter() - t1) * 1000
         if ok:
-            print(f"{_ts()} Executed '{action_name}' [{exec_ms:.0f}ms]")
-            save_mapping(transcript, action_name, action_name, confirmed=False)
+            print(f"{_ts()} Compound action '{intent.action}' completed [{exec_ms:.0f}ms]")
+            save_mapping(transcript, intent.action, intent.action, confirmed=False)
             increment_uses(transcript)
-            speaker.confirm(action_name)
+    elif intent.action != "unknown" and intent.confidence >= confidence_threshold:
+        # Simple action -> keystroke dispatch (bind-aware)
+        t1 = time.perf_counter()
+        ok = dispatch_profile_action(intent.action, profile, binds=binds)
+        exec_ms = (time.perf_counter() - t1) * 1000
+        if ok:
+            print(f"{_ts()} Executed '{intent.action}' [{exec_ms:.0f}ms]")
+            save_mapping(transcript, intent.action, intent.action, confirmed=False)
+            increment_uses(transcript)
+            speaker.confirm(intent.action)
     else:
         # Clarification loop (Option B)
         ptt_mode = config.get("mode", "ptt") == "ptt"
@@ -184,7 +203,7 @@ def process_transcript(
             ptt_mode=ptt_mode,
         )
         if confirmed_action:
-            ok = dispatch_profile_action(confirmed_action, profile)
+            ok = dispatch_profile_action(confirmed_action, profile, binds=binds)
             if ok:
                 save_mapping(transcript, confirmed_action, confirmed_action, confirmed=True)
                 increment_uses(transcript)
@@ -194,7 +213,11 @@ def process_transcript(
 # PTT mode loop
 # ---------------------------------------------------------------------------
 
-def run_ptt(config: dict, profile: dict, speaker: Speaker, stt: WhisperSTT) -> None:
+def run_ptt(
+    config: dict, profile: dict, speaker: Speaker, stt: WhisperSTT,
+    game_state: Any = None, binds: dict | None = None,
+    edsm: Any = None, spansh: Any = None,
+) -> None:
     ptt_key = config.get("ptt_key", "caps_lock")
     sample_rate = config.get("sample_rate", 16000)
     recorder = PTTRecorder(ptt_key=ptt_key, sample_rate=sample_rate)
@@ -220,6 +243,10 @@ def run_ptt(config: dict, profile: dict, speaker: Speaker, stt: WhisperSTT) -> N
             config=config,
             recorder=recorder,
             stt=stt,
+            game_state=game_state,
+            binds=binds,
+            edsm=edsm,
+            spansh=spansh,
         )
 
 
@@ -227,7 +254,11 @@ def run_ptt(config: dict, profile: dict, speaker: Speaker, stt: WhisperSTT) -> N
 # Always-on (VAD) mode loop
 # ---------------------------------------------------------------------------
 
-def run_always_on(config: dict, profile: dict, speaker: Speaker, stt: WhisperSTT) -> None:
+def run_always_on(
+    config: dict, profile: dict, speaker: Speaker, stt: WhisperSTT,
+    game_state: Any = None, binds: dict | None = None,
+    edsm: Any = None, spansh: Any = None,
+) -> None:
     device = config.get("device", "cpu")
     threshold = config.get("vad_threshold", 0.5)
     sample_rate = config.get("sample_rate", 16000)
@@ -251,6 +282,10 @@ def run_always_on(config: dict, profile: dict, speaker: Speaker, stt: WhisperSTT
                 config=config,
                 recorder=None,
                 stt=stt,
+                game_state=game_state,
+                binds=binds,
+                edsm=edsm,
+                spansh=spansh,
             )
     except KeyboardInterrupt:
         vad.stop()
@@ -295,6 +330,54 @@ def main() -> None:
     # Ollama pre-flight — inform user clearly if something is wrong
     _check_ollama(config.get("model", "phi3:mini"))
 
+    # --- Elite Dangerous integration (game state, binds, APIs) ---
+    game_state = None
+    binds: dict = {}
+    edsm = None
+    spansh = None
+
+    journal_path = config.get("elite_journal_path")
+    if journal_path and profile_name == "elite_dangerous":
+        try:
+            from gameapi.game_state import GameState
+            from gameapi.journal_watcher import JournalWatcher
+            from gameapi.status_reader import StatusReader
+            from gameapi.binds_parser import parse_binds, find_binds_file
+            from search.edsm import EDSMClient
+            from search.spansh import SpanshClient
+
+            game_state = GameState(journal_path)
+
+            # Start journal watcher (daemon thread)
+            watcher = JournalWatcher(journal_path, game_state)
+            watcher.start()
+            print("[MAIN] Journal watcher started (background)")
+
+            # Start status reader (daemon thread)
+            status_reader = StatusReader(journal_path, game_state)
+            status_reader.start()
+            print("[MAIN] Status reader started (background)")
+
+            # Parse keybindings from .binds file
+            binds_file = config.get("elite_binds_file") or find_binds_file(journal_path)
+            if binds_file:
+                binds = parse_binds(binds_file)
+                print(f"[MAIN] Loaded {len(binds)} keybindings from {binds_file}")
+            else:
+                print("[MAIN] Warning: No .binds file found. Using profile key defaults.")
+
+            # Init API clients
+            edsm = EDSMClient()
+            spansh = SpanshClient()
+            print("[MAIN] EDSM + Spansh API clients ready")
+
+        except ImportError as e:
+            print(f"[MAIN] Elite integration import failed: {e}")
+            print("       Run: pip install httpx watchdog")
+        except Exception as e:
+            print(f"[MAIN] Elite integration init error: {e}")
+            print("       Continuing without game state integration.")
+
     # Initialise shared components
     stt = WhisperSTT(
         model_size=config.get("whisper_model", "small"),
@@ -312,9 +395,9 @@ def main() -> None:
     try:
         mode = config.get("mode", "ptt")
         if mode == "always_on":
-            run_always_on(config, profile, speaker, stt)
+            run_always_on(config, profile, speaker, stt, game_state, binds, edsm, spansh)
         else:
-            run_ptt(config, profile, speaker, stt)
+            run_ptt(config, profile, speaker, stt, game_state, binds, edsm, spansh)
     except KeyboardInterrupt:
         print("\n[MAIN] Shutting down. Goodbye.")
         speaker.say("Shutting down. Goodbye.")

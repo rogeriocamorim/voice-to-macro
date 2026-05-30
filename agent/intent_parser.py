@@ -1,15 +1,17 @@
 """
 agent/intent_parser.py — LLM-based intent classification via Ollama.
 
-Sends a minimal classification prompt to a local Ollama model and
-returns the matched action name plus a confidence score.
+Supports two response modes:
+- Simple actions: returns a plain action name (existing behavior)
+- Compound actions: returns JSON {"action": "name", "params": {...}}
 
-The model only needs to return a single action name — it is not asked
-to reason, explain, or generate text. This keeps latency very low.
+The model is kept minimal — just classification, no reasoning.
 """
 
 from __future__ import annotations
+import json
 import re
+from dataclasses import dataclass, field
 from typing import Any
 
 import ollama  # type: ignore
@@ -25,6 +27,15 @@ _CLEAN_RE = re.compile(r"[^a-z0-9_ ]")
 _DESCRIPTION_MATCH_THRESHOLD = 72
 
 
+@dataclass
+class ParsedIntent:
+    """Result of intent classification."""
+    action: str
+    confidence: float
+    params: dict = field(default_factory=dict)
+    is_compound: bool = False
+
+
 def _clean(text: str) -> str:
     return _CLEAN_RE.sub("", text.strip().lower()).strip()
 
@@ -33,9 +44,10 @@ def parse_intent(
     transcript: str,
     profile: dict[str, Any],
     model: str = "phi3:mini",
-) -> tuple[str, float]:
+    game_state: Any = None,
+) -> ParsedIntent:
     """
-    Classify a voice transcript into an action name using a local LLM.
+    Classify a voice transcript into an action using a local LLM.
 
     Parameters
     ----------
@@ -45,24 +57,26 @@ def parse_intent(
         Active game profile dict.
     model : str
         Ollama model name.
+    game_state : GameState, optional
+        Current game state for context.
 
     Returns
     -------
-    tuple[str, float]
-        (action_name, confidence)
-        - action_name: key from profile["actions"], or "unknown"
-        - confidence: 1.0 if exact match, 0.5 if partial, 0.0 if unknown
+    ParsedIntent
+        Classified action with confidence and optional params.
     """
     if not transcript.strip():
-        return "unknown", 0.0
+        return ParsedIntent("unknown", 0.0)
 
     actions = profile.get("actions", {})
-    action_keys = set(actions.keys())
+    compound_actions = profile.get("compound_actions", {})
+    all_action_keys = set(actions.keys()) | set(compound_actions.keys())
 
     # --- Fast-path: fuzzy match against action descriptions ---
-    # Skip the LLM entirely if the transcript closely matches a description.
     t_lower = transcript.lower().strip()
     best_action, best_score = None, 0
+    is_best_compound = False
+
     for action_name, action_data in actions.items():
         description = action_data.get("description", "").lower()
         score = max(
@@ -72,14 +86,27 @@ def parse_intent(
         if score > best_score:
             best_score = score
             best_action = action_name
+            is_best_compound = False
 
-    if best_score >= _DESCRIPTION_MATCH_THRESHOLD and best_action:
+    for action_name, action_data in compound_actions.items():
+        description = action_data.get("description", "").lower()
+        score = max(
+            fuzz.token_set_ratio(t_lower, description),
+            fuzz.partial_ratio(t_lower, description),
+        )
+        if score > best_score:
+            best_score = score
+            best_action = action_name
+            is_best_compound = True
+
+    # Only use fuzzy match for simple actions (compound need params from LLM)
+    if best_score >= _DESCRIPTION_MATCH_THRESHOLD and best_action and not is_best_compound:
         confidence = round(best_score / 100, 2)
         print(f"[AGENT] Description match: '{best_action}' (score={best_score})")
-        return best_action, confidence
+        return ParsedIntent(best_action, confidence)
 
     # --- LLM classification (Ollama) ---
-    prompt = build_prompt(transcript, profile)
+    prompt = build_prompt(transcript, profile, game_state)
 
     try:
         response = ollama.generate(
@@ -87,8 +114,8 @@ def parse_intent(
             prompt=prompt,
             options={
                 "temperature": 0.0,   # deterministic — classification only
-                "num_predict": 20,    # we only need a few tokens
-                "stop": ["\n", ".", ","],
+                "num_predict": 60,    # slightly more tokens for JSON responses
+                "stop": ["\n\n"],
             },
         )
         raw = response.get("response", "").strip()
@@ -101,22 +128,68 @@ def parse_intent(
             print(f"[AGENT] Model not found. Pull it with: ollama pull {model}")
         else:
             print(f"[AGENT] Ollama error: {e}")
-        return "unknown", 0.0
+        return ParsedIntent("unknown", 0.0)
 
+    # --- Try JSON parse first (compound action) ---
+    json_result = _try_parse_json(raw, compound_actions)
+    if json_result:
+        return json_result
+
+    # --- Plain text matching (simple action) ---
     cleaned = _clean(raw)
 
     # Exact match
-    if cleaned in action_keys:
-        return cleaned, 1.0
+    if cleaned in all_action_keys:
+        is_compound = cleaned in compound_actions
+        return ParsedIntent(cleaned, 1.0, is_compound=is_compound)
 
-    # Partial match (LLM returned something like "fsd jump" for "fsd_jump")
-    normalized_actions = {a.replace("_", " "): a for a in action_keys}
+    # Partial match (LLM returned "fsd jump" for "fsd_jump")
+    normalized_actions = {a.replace("_", " "): a for a in all_action_keys}
     if cleaned in normalized_actions:
-        return normalized_actions[cleaned], 0.9
+        action = normalized_actions[cleaned]
+        is_compound = action in compound_actions
+        return ParsedIntent(action, 0.9, is_compound=is_compound)
 
-    # Fuzzy fallback — check if LLM response starts with or contains a known action
+    # Fuzzy fallback — check if LLM response contains a known action
     for display, original in normalized_actions.items():
         if display in cleaned or cleaned in display:
-            return original, 0.7
+            is_compound = original in compound_actions
+            return ParsedIntent(original, 0.7, is_compound=is_compound)
 
-    return "unknown", 0.0
+    return ParsedIntent("unknown", 0.0)
+
+
+def _try_parse_json(raw: str, compound_actions: dict) -> ParsedIntent | None:
+    """
+    Attempt to parse LLM output as JSON for compound actions.
+    Returns ParsedIntent if valid, None otherwise.
+    """
+    # Try to find JSON in the response (LLM may add text around it)
+    raw = raw.strip()
+
+    # Direct JSON parse
+    try:
+        data = json.loads(raw)
+        if isinstance(data, dict) and "action" in data:
+            action = data["action"]
+            params = data.get("params", {})
+            if action in compound_actions:
+                return ParsedIntent(action, 1.0, params=params, is_compound=True)
+    except json.JSONDecodeError:
+        pass
+
+    # Try extracting JSON from surrounding text
+    start = raw.find("{")
+    end = raw.rfind("}") + 1
+    if start >= 0 and end > start:
+        try:
+            data = json.loads(raw[start:end])
+            if isinstance(data, dict) and "action" in data:
+                action = data["action"]
+                params = data.get("params", {})
+                if action in compound_actions:
+                    return ParsedIntent(action, 0.9, params=params, is_compound=True)
+        except json.JSONDecodeError:
+            pass
+
+    return None

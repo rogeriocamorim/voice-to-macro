@@ -306,10 +306,13 @@ class VoiceEngine(QThread):
             action_name = learned["intent"]
             self.log.emit(f"[{_ts()}] Learned match: '{transcript}' -> {action_name}")
             self.status.emit(f"EXEC: {action_name}")
-            ok = dispatch_profile_action(action_name, profile)
+            ok = dispatch_profile_action(action_name, profile, binds=self._binds)
             if ok:
                 increment_uses(transcript)
                 speaker.confirm(action_name)
+            else:
+                self.log.emit(f"[{_ts()}] [ERROR] Failed to dispatch learned action '{action_name}'")
+                speaker.say(f"I know the command {action_name.replace('_', ' ')}, but could not execute it.")
             self.status.emit("IDLE")
             return
 
